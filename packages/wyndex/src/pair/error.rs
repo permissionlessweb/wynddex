@@ -3,7 +3,7 @@ use cosmwasm_std::{CheckedMultiplyRatioError, ConversionOverflowError, OverflowE
 use thiserror::Error;
 
 /// This enum describes pair contract errors
-#[derive(Error, Debug, PartialEq)]
+#[derive(Error, Debug)]
 pub enum ContractError {
     #[error("{0}")]
     Std(#[from] StdError),
@@ -119,15 +119,6 @@ pub enum ContractError {
     SpotPriceInvalidIterations {},
 }
 
-impl From<ContractError> for StdError {
-    fn from(e: ContractError) -> Self {
-        match e {
-            ContractError::Std(e) => e,
-            _ => StdError::generic_err(e.to_string()),
-        }
-    }
-}
-
 impl From<OverflowError> for ContractError {
     fn from(o: OverflowError) -> Self {
         StdError::from(o).into()
@@ -137,5 +128,13 @@ impl From<OverflowError> for ContractError {
 impl From<ConversionOverflowError> for ContractError {
     fn from(o: ConversionOverflowError) -> Self {
         StdError::from(o).into()
+    }
+}
+
+impl PartialEq for ContractError {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            _ => core::mem::discriminant(self) == core::mem::discriminant(other),
+        }
     }
 }

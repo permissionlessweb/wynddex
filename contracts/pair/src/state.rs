@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, Uint128};
+use cosmwasm_std::{Addr, Uint256};
 use cw_storage_plus::Item;
 use wyndex::pair::PairInfo;
 
@@ -13,9 +13,9 @@ pub struct Config {
     /// The last timestamp when the pair contract update the asset cumulative prices
     pub block_time_last: u64,
     /// The last cumulative price for asset 0
-    pub price0_cumulative_last: Uint128,
+    pub price0_cumulative_last: Uint256,
     /// The last cumulative price for asset 1
-    pub price1_cumulative_last: Uint128,
+    pub price1_cumulative_last: Uint256,
     /// The block time until which trading is disabled
     pub trading_starts: u64,
 }

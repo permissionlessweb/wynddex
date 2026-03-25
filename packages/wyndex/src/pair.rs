@@ -9,7 +9,7 @@ use crate::{
 };
 
 use cosmwasm_std::{
-    to_json_binary, Addr, Binary, Decimal, Decimal256, QuerierWrapper, StdError, StdResult, Uint128,
+    to_json_binary, Addr, Binary, Decimal256, QuerierWrapper, StdError, StdResult, Uint256,
     WasmMsg,
 };
 use cw20::Cw20ReceiveMsg;
@@ -28,7 +28,7 @@ pub use instantiate::*;
 pub use referral::*;
 pub use utils::*;
 
-/// Decimal precision for TWAP results
+/// Decimal256 precision for TWAP results
 pub const TWAP_PRECISION: u8 = 6;
 
 /// This structure stores the main parameters for an Wyndex pair
@@ -87,7 +87,7 @@ impl PairInfo {
                         asset_info.query_balance(querier, &contract_addr)?,
                         asset_info.decimals(querier)?.into(),
                     )
-                    .map_err(|_| StdError::generic_err("Decimal256RangeExceeded"))?,
+                    .map_err(|_| StdError::msg("Decimal256RangeExceeded"))?,
                 })
             })
             .collect()
@@ -128,8 +128,8 @@ impl InstantiateMsg {
 pub struct StakeConfig {
     /// The staking contract code ID
     pub staking_code_id: u64,
-    pub tokens_per_power: Uint128,
-    pub min_bond: Uint128,
+    pub tokens_per_power: Uint256,
+    pub min_bond: Uint256,
     pub unbonding_periods: Vec<u64>,
     pub max_distributions: u32,
     /// Optional converter configuration for the staking contract
@@ -178,7 +178,7 @@ pub enum ExecuteMsg {
         /// The assets available in the pool
         assets: Vec<Asset>,
         /// The slippage tolerance that allows liquidity provision only if the price in the pool doesn't move too much
-        slippage_tolerance: Option<Decimal>,
+        slippage_tolerance: Option<Decimal256>,
         /// The receiver of LP tokens
         receiver: Option<String>,
     },
@@ -186,14 +186,14 @@ pub enum ExecuteMsg {
     Swap {
         offer_asset: Asset,
         ask_asset_info: Option<AssetInfo>,
-        belief_price: Option<Decimal>,
-        max_spread: Option<Decimal>,
+        belief_price: Option<Decimal256>,
+        max_spread: Option<Decimal256>,
         to: Option<String>,
         /// The address that should receive the referral commission
         referral_address: Option<String>,
         /// The commission for the referral.
         /// This is capped by the configured max commission
-        referral_commission: Option<Decimal>,
+        referral_commission: Option<Decimal256>,
     },
     /// Update the pair configuration
     UpdateConfig { params: Binary },
@@ -221,14 +221,14 @@ pub enum Cw20HookMsg {
     /// Swap a given amount of asset
     Swap {
         ask_asset_info: Option<AssetInfo>,
-        belief_price: Option<Decimal>,
-        max_spread: Option<Decimal>,
+        belief_price: Option<Decimal256>,
+        max_spread: Option<Decimal256>,
         to: Option<String>,
         /// The address that should receive the referral commission
         referral_address: Option<String>,
         /// The commission for the referral.
         /// This is capped by and defaulting to the configured max commission
-        referral_commission: Option<Decimal>,
+        referral_commission: Option<Decimal256>,
     },
     /// Withdraw liquidity from the pool
     WithdrawLiquidity { assets: Vec<Asset> },
@@ -258,7 +258,7 @@ pub enum QueryMsg {
     Config {},
     /// Returns information about the share of the pool in a vector that contains objects of type [`Asset`].
     #[returns(Vec<AssetValidated>)]
-    Share { amount: Uint128 },
+    Share { amount: Uint256 },
     /// Returns information about a swap simulation in a [`SimulationResponse`] object.
     #[returns(SimulationResponse)]
     Simulation {
@@ -268,7 +268,7 @@ pub enum QueryMsg {
         referral: bool,
         /// The commission for the referral. Only used if `referral` is set to `true`.
         /// This is capped by and defaulting to the configured max commission
-        referral_commission: Option<Decimal>,
+        referral_commission: Option<Decimal256>,
     },
     /// Returns information about cumulative prices in a [`ReverseSimulationResponse`] object.
     #[returns(ReverseSimulationResponse)]
@@ -279,7 +279,7 @@ pub enum QueryMsg {
         referral: bool,
         /// The commission for the referral. Only used if `referral` is set to `true`.
         /// This is capped by and defaulting to the configured max commission
-        referral_commission: Option<Decimal>,
+        referral_commission: Option<Decimal256>,
     },
     /// Returns information about the cumulative prices in a [`CumulativePricesResponse`] object
     #[returns(CumulativePricesResponse)]
@@ -294,7 +294,7 @@ pub enum QueryMsg {
         end_age: Option<u32>,
     },
     /// Returns current D invariant in as a [`u128`] value
-    #[returns(Uint128)]
+    #[returns(Uint256)]
     QueryComputeD {},
     /// Return current spot price of input in terms of output
     #[returns(SpotPriceResponse)]
@@ -307,9 +307,9 @@ pub enum QueryMsg {
         offer: AssetInfo,
         ask: AssetInfo,
         /// The maximum amount of offer to be sold
-        max_trade: Uint128,
+        max_trade: Uint256,
         /// The lowest spot price any offer token should be sold at
-        target_price: Decimal,
+        target_price: Decimal256,
         /// The maximum number of iterations used to bisect the space.
         /// (higher numbers gives more accuracy at higher gas cost)
         iterations: u8,
@@ -322,7 +322,7 @@ pub struct PoolResponse {
     /// The assets in the pool together with asset amounts
     pub assets: Vec<AssetValidated>,
     /// The total amount of LP tokens currently issued
-    pub total_share: Uint128,
+    pub total_share: Uint256,
 }
 
 /// This struct is used to return a query result with the general contract configuration.
@@ -340,26 +340,26 @@ pub struct ConfigResponse {
 #[cw_serde]
 pub struct SimulationResponse {
     /// The amount of ask assets returned by the swap (denominated in `ask_asset_info`)
-    pub return_amount: Uint128,
+    pub return_amount: Uint256,
     /// The spread used in the swap operation (denominated in `ask_asset_info`)
-    pub spread_amount: Uint128,
+    pub spread_amount: Uint256,
     /// The amount of fees charged by the transaction (denominated in `ask_asset_info`)
-    pub commission_amount: Uint128,
+    pub commission_amount: Uint256,
     /// The absolute amount of referral commission (denominated in `offer_asset_info`)
-    pub referral_amount: Uint128,
+    pub referral_amount: Uint256,
 }
 
 /// This structure holds the parameters that are returned from a reverse swap simulation response.
 #[cw_serde]
 pub struct ReverseSimulationResponse {
     /// The amount of offer assets returned by the reverse swap
-    pub offer_amount: Uint128,
+    pub offer_amount: Uint256,
     /// The spread used in the swap operation
-    pub spread_amount: Uint128,
+    pub spread_amount: Uint256,
     /// The amount of fees charged by the transaction
-    pub commission_amount: Uint128,
+    pub commission_amount: Uint256,
     /// The absolute amount of referral commission (denominated in `offer_asset_info`)
-    pub referral_amount: Uint128,
+    pub referral_amount: Uint256,
 }
 
 /// This structure is used to return a cumulative prices query response.
@@ -368,9 +368,9 @@ pub struct CumulativePricesResponse {
     /// The assets in the pool to query
     pub assets: Vec<AssetValidated>,
     /// The total amount of LP tokens currently issued
-    pub total_share: Uint128,
+    pub total_share: Uint256,
     /// The vector contains cumulative prices for each pair of assets in the pool
-    pub cumulative_prices: Vec<(AssetInfoValidated, AssetInfoValidated, Uint128)>,
+    pub cumulative_prices: Vec<(AssetInfoValidated, AssetInfoValidated, Uint256)>,
 }
 
 /// This structure holds stableswap pool parameters.
@@ -401,7 +401,7 @@ pub struct LsdInfo {
 #[cw_serde]
 pub struct StablePoolConfig {
     /// The stableswap pool amplification
-    pub amp: Decimal,
+    pub amp: Decimal256,
 }
 
 /// This enum stores the options available to start and stop changing a stableswap pool's amplification.
@@ -414,12 +414,12 @@ pub enum StablePoolUpdateParams {
 /// This structure holds the parameters that are returned from a reverse swap simulation response.
 #[cw_serde]
 pub struct SpotPriceResponse {
-    pub price: Decimal,
+    pub price: Decimal256,
 }
 
 #[cw_serde]
 pub struct SpotPricePredictionResponse {
     /// Represents units to buy until spot price hits target (in query).
     /// Returns None, result is already below the spot price
-    pub trade: Option<Uint128>,
+    pub trade: Option<Uint256>,
 }

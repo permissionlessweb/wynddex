@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use cosmwasm_std::{Addr, Deps, DepsMut, Env, MessageInfo, Response, StdResult, Storage, Uint128};
+use cosmwasm_std::{Addr, Deps, DepsMut, Env, MessageInfo, Response, StdResult, Storage, Uint128, Uint256};
 use wyndex::asset::{AssetInfo, AssetInfoExt, AssetInfoValidated};
 
 use crate::error::ContractError;
@@ -60,35 +60,37 @@ pub fn execute_distribute_rewards(
             continue;
         }
 
-        let withdrawable: u128 = distribution.withdrawable_total.into();
+        let withdrawable = distribution.withdrawable_total;
 
         // Query current reward balance
         let balance =
-            undistributed_rewards(deps.as_ref(), &asset_info, env.contract.address.clone())?.u128();
+            undistributed_rewards(deps.as_ref(), &asset_info, env.contract.address.clone())?;
 
         let curve = REWARD_CURVE.load(deps.storage, &asset_info)?;
 
         // Calculate how much we have received since the last time Distributed was called,
         // including only the reward config amount that is eligible for distribution.
         // This is the amount we will distribute to all members.
-        let amount = balance - withdrawable - curve.value(env.block.time.seconds()).u128();
+        // balance = withdrawable (allocated) + curve_value (still locked) + new_amount
+        // => new_amount = balance - withdrawable - curve_value
+        let amount = balance - withdrawable - Uint256::from(curve.value(env.block.time.seconds()));
 
-        if amount == 0 {
+        if amount == Uint256::zero() {
             continue;
         }
 
-        let leftover: u128 = distribution.shares_leftover.into();
-        let points = (amount << SHARES_SHIFT) + leftover;
-        let points_per_share = points / total_rewards.u128();
-        distribution.shares_leftover = (points % total_rewards.u128()) as u64;
+        let leftover = Uint256::from(distribution.shares_leftover as u128);
+        let points = amount * Uint256::from(2u128).pow(SHARES_SHIFT as u32) + leftover;
+        let points_per_share = points / total_rewards;
+        distribution.shares_leftover = Uint128::try_from(points % total_rewards).unwrap().u128() as u64;
 
         // Everything goes back to 128-bits/16-bytes
         // Full amount is added here to total withdrawable, as it should not be considered on its own
         // on future distributions - even if because of calculation offsets it is not fully
         // distributed, the error is handled by leftover.
-        distribution.shares_per_point += Uint128::new(points_per_share);
-        distribution.distributed_total += Uint128::new(amount);
-        distribution.withdrawable_total += Uint128::new(amount);
+        distribution.shares_per_point += points_per_share;
+        distribution.distributed_total += amount;
+        distribution.withdrawable_total += amount;
 
         DISTRIBUTION.save(deps.storage, &asset_info, &distribution)?;
 
@@ -104,7 +106,7 @@ fn undistributed_rewards(
     deps: Deps,
     asset_info: &AssetInfoValidated,
     contract_address: impl Into<String>,
-) -> StdResult<Uint128> {
+) -> StdResult<Uint256> {
     asset_info.query_balance(&deps.querier, contract_address)
 }
 
@@ -186,11 +188,11 @@ pub fn execute_delegate_withdrawal(
 
 pub fn query_withdrawable_rewards(
     deps: Deps,
-    owner: String,
+    owner: Addr,
 ) -> StdResult<WithdrawableRewardsResponse> {
     // Not checking address, as if it is invalid it is guaranteed not to appear in maps, so
     // `withdrawable_rewards` would return error itself.
-    let owner = Addr::unchecked(owner);
+    let owner = owner;
 
     let cfg = CONFIG.load(deps.storage)?;
     let distributions =
@@ -273,7 +275,7 @@ pub fn query_withdraw_adjustment_data(
         .may_load(deps.storage, (&addr, &asset))?
         .unwrap_or(WithdrawAdjustmentDataResponse {
             shares_correction: 0,
-            withdrawn_rewards: Uint128::zero(),
+            withdrawn_rewards: Uint256::zero(),
         });
     Ok(adjust)
 }
@@ -306,17 +308,17 @@ pub fn withdrawable_rewards(
     owner: &Addr,
     distribution: &Distribution,
     adjustment: &WithdrawAdjustment,
-) -> StdResult<Uint128> {
-    let ppw = distribution.shares_per_point.u128();
-    let points = distribution
-        .calc_rewards_power(deps.storage, cfg, owner)?
-        .u128();
+) -> StdResult<Uint256> {
+    let ppw = Uint128::try_from(distribution.shares_per_point).unwrap().u128();
+    let points = Uint128::try_from(
+        distribution.calc_rewards_power(deps.storage, cfg, owner)?
+    ).unwrap().u128();
 
     let correction = adjustment.shares_correction;
     let points = (ppw * points) as i128;
     let points = points + correction;
     let amount = points as u128 >> SHARES_SHIFT;
-    let amount = amount - adjustment.withdrawn_rewards.u128();
+    let amount = Uint256::from(amount) - adjustment.withdrawn_rewards;
 
-    Ok(amount.into())
+    Ok(amount)
 }

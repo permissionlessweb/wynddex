@@ -1,5 +1,5 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::{CosmosMsg, Decimal, Uint128};
+use cosmwasm_std::{CosmosMsg, Decimal, Uint256};
 use wyndex::asset::Asset;
 
 #[cw_serde]
@@ -15,7 +15,7 @@ pub struct InstantiateMsg {
 
 #[cw_serde]
 pub enum ExecuteMsg {
-    UpdateRewards { amount: Uint128 },
+    UpdateRewards { amount: Uint256 },
 }
 
 #[cw_serde]

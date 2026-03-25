@@ -1,4 +1,4 @@
-use cosmwasm_std::{to_json_binary, Addr, Decimal, StdResult, SubMsg, Uint128, WasmMsg};
+use cosmwasm_std::{to_json_binary, Addr, Decimal256, StdResult, SubMsg, Uint256, WasmMsg};
 use cw20::Cw20ExecuteMsg;
 use wyndex::utils::{Curve, PiecewiseLinear, SaturatingLinear};
 
@@ -6,12 +6,12 @@ use crate::state::Config;
 
 pub fn create_undelegate_msg(
     recipient: Addr,
-    amount: Uint128,
+    amount: Uint256,
     contract: Addr,
 ) -> StdResult<SubMsg> {
     let undelegate = Cw20ExecuteMsg::Transfer {
         recipient: recipient.to_string(),
-        amount,
+        amount: amount.into(),
     };
     Ok(SubMsg::new(WasmMsg::Execute {
         contract_addr: contract.to_string(),
@@ -20,9 +20,9 @@ pub fn create_undelegate_msg(
     }))
 }
 
-pub fn calc_power(cfg: &Config, stake: Uint128, multiplier: Decimal) -> Uint128 {
+pub fn calc_power(cfg: &Config, stake: Uint256, multiplier: Decimal256) -> Uint256 {
     if stake < cfg.min_bond {
-        Uint128::zero()
+        Uint256::zero()
     } else {
         stake.mul_floor(multiplier) / cfg.tokens_per_power
     }

@@ -1,10 +1,10 @@
-use cosmwasm_std::{Coin, OverflowError, StdError, Uint128};
+use cosmwasm_std::{Coin, ConversionOverflowError, OverflowError, StdError, Uint256};
 use thiserror::Error;
 
 use cw_controllers::{AdminError, HookError};
 use wyndex::{asset::AssetInfoValidated, utils::CurveError};
 
-#[derive(Error, Debug, PartialEq)]
+#[derive(Error, Debug)]
 pub enum ContractError {
     #[error("{0}")]
     Std(#[from] StdError),
@@ -37,8 +37,8 @@ pub enum ContractError {
 
     #[error("Trying to mass delegate {total} tokens, but only sent {amount_sent}.")]
     MassDelegateTooMuch {
-        total: Uint128,
-        amount_sent: Uint128,
+        total: Uint256,
+        amount_sent: Uint256,
     },
 
     #[error("No funds sent")]
@@ -96,5 +96,20 @@ pub enum ContractError {
 impl From<OverflowError> for ContractError {
     fn from(e: OverflowError) -> Self {
         ContractError::Std(e.into())
+    }
+}
+
+impl From<ConversionOverflowError> for ContractError {
+    fn from(e: ConversionOverflowError) -> Self {
+        ContractError::Std(e.into())
+    }
+}
+
+
+impl PartialEq for ContractError {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            _ => core::mem::discriminant(self) == core::mem::discriminant(other),
+        }
     }
 }

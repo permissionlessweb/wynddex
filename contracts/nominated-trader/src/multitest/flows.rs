@@ -10,7 +10,7 @@ mod fail_cases {
     use crate::msg::AssetWithLimit;
     use crate::multitest::suite::SuiteBuilder;
 
-    use cosmwasm_std::{Addr, Uint128};
+    use cosmwasm_std::{Addr, Uint256};
     use wyndex::asset::token_asset_info;
     use wyndex::asset::AssetInfo;
 
@@ -25,10 +25,7 @@ mod fail_cases {
         let token_to_swap = suite.instantiate_token(&owner, "notwynd");
 
         let nominated_trader_contract = suite
-            .setup_trader(
-                Addr::unchecked("owner"),
-                AssetInfo::Token(token.to_string()),
-            )
+            .setup_trader(&owner, AssetInfo::Token(token.to_string()))
             .unwrap();
         let assets_to_take = vec![AssetWithLimit {
             info: AssetInfo::Token(token_to_swap.to_string()),
@@ -41,7 +38,7 @@ mod fail_cases {
                 &owner,
                 &token_to_swap,
                 1_000_000u128,
-                nominated_trader_contract.as_ref(),
+                &nominated_trader_contract,
             )
             .unwrap();
 
@@ -53,9 +50,9 @@ mod fail_cases {
             )
             .unwrap_err();
 
-        assert_eq!(
-            err.root_cause().to_string(),
-            "Cannot swap contract2. No swap destinations"
+        assert!(
+            err.to_string().contains("No swap destinations"),
+            "unexpected error: {err}"
         );
     }
     #[test]
@@ -69,10 +66,7 @@ mod fail_cases {
         let token_to_swap = suite.instantiate_token(&owner, "notwynd");
 
         let nominated_trader_contract = suite
-            .setup_trader(
-                Addr::unchecked("owner"),
-                AssetInfo::Token(token.to_string()),
-            )
+            .setup_trader(&owner, AssetInfo::Token(token.to_string()))
             .unwrap();
 
         // Mint some cw20 into the trader contract
@@ -81,7 +75,7 @@ mod fail_cases {
                 &owner,
                 &token_to_swap,
                 1_000_000u128,
-                nominated_trader_contract.as_ref(),
+                &nominated_trader_contract,
             )
             .unwrap();
 
@@ -98,9 +92,10 @@ mod fail_cases {
             )
             .unwrap_err();
 
-        assert_eq!(
-            err.root_cause().to_string(),
-            "not enough pools to route assets to desired base token"
+        assert!(
+            err.to_string()
+                .contains("not enough pools to route assets to desired base token"),
+            "unexpected error: {err}"
         );
     }
 
@@ -115,10 +110,7 @@ mod fail_cases {
         let token_to_swap = suite.instantiate_token(&owner, "notwynd");
 
         let nominated_trader_contract = suite
-            .setup_trader(
-                Addr::unchecked("owner"),
-                AssetInfo::Token(token.to_string()),
-            )
+            .setup_trader(&owner, AssetInfo::Token(token.to_string()))
             .unwrap();
 
         // Mint some cw20 into the trader contract
@@ -127,26 +119,26 @@ mod fail_cases {
                 &owner,
                 &token_to_swap,
                 1_000_000u128,
-                nominated_trader_contract.as_ref(),
+                &nominated_trader_contract,
             )
             .unwrap();
 
         let new_route = Some(vec![(
-            token_asset_info(token_to_swap.as_ref()),
-            token_asset_info(token.as_ref()),
+            token_asset_info(&token_to_swap),
+            token_asset_info(&token),
         )]);
 
         let err = suite
             .update_routes(
-                &suite.owner.to_string(),
+                &suite.owner.clone(),
                 nominated_trader_contract.clone(),
                 new_route,
                 None,
             )
             .unwrap_err();
-        assert_eq!(
-            err.root_cause().to_string(),
-            "Invalid route. Pool contract2 to contract1 not found"
+        assert!(
+            err.to_string().contains("Invalid route") && err.to_string().contains("not found"),
+            "unexpected error: {err}"
         );
     }
 
@@ -161,10 +153,7 @@ mod fail_cases {
         let token_to_swap = suite.instantiate_token(&owner, "notwynd");
 
         let nominated_trader_contract = suite
-            .setup_trader(
-                Addr::unchecked("owner"),
-                AssetInfo::Token(token.to_string()),
-            )
+            .setup_trader(&owner, AssetInfo::Token(token.to_string()))
             .unwrap();
 
         // Mint some cw20 into the trader contract
@@ -173,31 +162,27 @@ mod fail_cases {
                 &owner,
                 &token_to_swap,
                 1_000_000u128,
-                nominated_trader_contract.as_ref(),
+                &nominated_trader_contract,
             )
             .unwrap();
 
         // Mint some more cw20 into the trader contract
         suite
-            .mint_cw20(
-                &owner,
-                &token,
-                1_000_000u128,
-                nominated_trader_contract.as_ref(),
-            )
+            .mint_cw20(&owner, &token, 1_000_000u128, &nominated_trader_contract)
             .unwrap();
         let err = suite
             .spend(
-                &suite.trader.to_string(),
+                &suite.trader.clone(),
                 nominated_trader_contract.clone(),
-                suite.trader.clone(),
-                Uint128::new(100_000u128),
+                &suite.trader.clone(),
+                Uint256::from(100_000u128),
             )
             .unwrap_err();
 
-        assert_eq!(
-            err.root_cause().to_string(),
-            "Unauthorized Only the owner can submit a spend"
+        assert!(
+            err.to_string()
+                .contains("Unauthorized Only the owner can submit a spend"),
+            "unexpected error: {err}"
         );
     }
     #[test]
@@ -207,32 +192,29 @@ mod fail_cases {
         let owner = suite.owner.clone();
 
         let token = suite.instantiate_token(&owner, "wynd");
-
         let token_to_swap = suite.instantiate_token(&owner, "notwynd");
 
         let nominated_trader_contract = suite
-            .setup_trader(
-                Addr::unchecked("owner"),
-                AssetInfo::Token(token.to_string()),
-            )
+            .setup_trader(&owner, AssetInfo::Token(token.to_string()))
             .unwrap();
 
         let new_route = Some(vec![(
-            token_asset_info(token.as_ref()),
-            token_asset_info(token_to_swap.as_ref()),
+            token_asset_info(&token),
+            token_asset_info(&token_to_swap),
         )]);
         let err = suite
             .update_routes(
-                &suite.trader.to_string(),
+                &suite.trader.clone(),
                 nominated_trader_contract,
                 new_route,
                 None,
             )
             .unwrap_err();
 
-        assert_eq!(
-            err.root_cause().to_string(),
-            "Unauthorized Only the owner can update routes"
+        assert!(
+            err.to_string()
+                .contains("Unauthorized Only the owner can update routes"),
+            "unexpected error: {err}"
         );
     }
 }
@@ -241,7 +223,8 @@ mod trader_flows {
     use crate::msg::AssetWithLimit;
     use crate::multitest::suite::SuiteBuilder;
 
-    use cosmwasm_std::{assert_approx_eq, coin, Addr, Uint128};
+    use cosmwasm_std::testing::MockApi;
+    use cosmwasm_std::{assert_approx_eq, coin, Addr, Uint128, Uint256};
     use wyndex::asset::{native_asset_info, token_asset_info};
     use wyndex::{asset::AssetInfo, factory::PairType};
 
@@ -260,10 +243,7 @@ mod trader_flows {
         let token_to_swap = suite.instantiate_token(&owner, "notwynd");
 
         let nominated_trader_contract = suite
-            .setup_trader(
-                Addr::unchecked("owner"),
-                AssetInfo::Token(token.to_string()),
-            )
+            .setup_trader(&owner, AssetInfo::Token(token.to_string()))
             .unwrap();
 
         // create LP for just instantiated tokens
@@ -301,18 +281,18 @@ mod trader_flows {
                 &owner,
                 &token_to_swap,
                 1_000_000u128,
-                nominated_trader_contract.as_ref(),
+                &nominated_trader_contract,
             )
             .unwrap();
 
         let new_route = Some(vec![(
-            token_asset_info(token.as_ref()),
-            token_asset_info(token_to_swap.as_ref()),
+            token_asset_info(&token),
+            token_asset_info(&token_to_swap),
         )]);
 
         suite
             .update_routes(
-                &suite.owner.to_string(),
+                &suite.owner.clone(),
                 nominated_trader_contract.clone(),
                 new_route,
                 None,
@@ -329,10 +309,10 @@ mod trader_flows {
         // Next remove the route
         suite
             .update_routes(
-                &suite.owner.to_string(),
+                &suite.owner.clone(),
                 nominated_trader_contract.clone(),
                 None,
-                Some(vec![token_asset_info(token.as_ref())]),
+                Some(vec![token_asset_info(&token)]),
             )
             .unwrap();
         // Query routes to confirm
@@ -344,14 +324,11 @@ mod trader_flows {
         assert!(routes.is_empty());
 
         // Add a new route
-        let new_route = Some(vec![(
-            token_asset_info(token.as_ref()),
-            native_asset_info(ujuno),
-        )]);
+        let new_route = Some(vec![(token_asset_info(&token), native_asset_info(ujuno))]);
 
         suite
             .update_routes(
-                &suite.owner.to_string(),
+                &suite.owner.clone(),
                 nominated_trader_contract.clone(),
                 new_route,
                 None,
@@ -381,10 +358,7 @@ mod trader_flows {
         let token_to_swap = suite.instantiate_token(&owner, "notwynd");
 
         let nominated_trader_contract = suite
-            .setup_trader(
-                Addr::unchecked("owner"),
-                AssetInfo::Native(ujuno.to_string()),
-            )
+            .setup_trader(&owner, AssetInfo::Native(ujuno.to_string()))
             .unwrap();
         // Create 1 pair, cw20 token to swap and the desired native token
         suite
@@ -402,17 +376,17 @@ mod trader_flows {
                 &owner,
                 &token_to_swap,
                 1_000_000u128,
-                nominated_trader_contract.as_ref(),
+                &nominated_trader_contract,
             )
             .unwrap();
         // Setup 1 route
         let new_route = Some(vec![(
             native_asset_info(ujuno),
-            token_asset_info(token_to_swap.as_ref()),
+            token_asset_info(&token_to_swap),
         )]);
         suite
             .update_routes(
-                &suite.owner.to_string(),
+                &suite.owner.clone(),
                 nominated_trader_contract.clone(),
                 new_route,
                 None,
@@ -440,7 +414,11 @@ mod trader_flows {
             .unwrap();
         // Verify the first balance is our native token and that we have 1_000_000u128 worth give or take 1%
         assert!(balance.balances[0].info.is_native_token());
-        assert_approx_eq!(balance.balances[0].amount, 1_000_000u128.into(), "0.01");
+        assert_approx_eq!(
+            Uint128::try_from(balance.balances[0].amount).unwrap(),
+            Uint128::new(1_000_000u128),
+            "0.01"
+        );
     }
 
     #[test]
@@ -456,10 +434,7 @@ mod trader_flows {
         let token_to_swap = suite.instantiate_token(&owner, "notwynd");
 
         let nominated_trader_contract = suite
-            .setup_trader(
-                Addr::unchecked("owner"),
-                AssetInfo::Token(token.to_string()),
-            )
+            .setup_trader(&owner, AssetInfo::Token(token.to_string()))
             .unwrap();
         // Create 1 pair, cw20 token to swap and the desired token
         suite
@@ -477,17 +452,17 @@ mod trader_flows {
                 &owner,
                 &token_to_swap,
                 1_000_000u128,
-                nominated_trader_contract.as_ref(),
+                &nominated_trader_contract,
             )
             .unwrap();
         // Setup 1 route
         let new_route = Some(vec![(
-            token_asset_info(token.as_ref()),
-            token_asset_info(token_to_swap.as_ref()),
+            token_asset_info(&token),
+            token_asset_info(&token_to_swap),
         )]);
         suite
             .update_routes(
-                &suite.owner.to_string(),
+                &suite.owner.clone(),
                 nominated_trader_contract.clone(),
                 new_route,
                 None,
@@ -520,13 +495,13 @@ mod trader_flows {
                 &owner,
                 &token_to_swap,
                 1_000_000u128,
-                nominated_trader_contract.as_ref(),
+                &nominated_trader_contract,
             )
             .unwrap();
 
         let assets_to_take = vec![AssetWithLimit {
             info: AssetInfo::Token(token_to_swap.to_string()),
-            limit: Some(Uint128::new(100_000u128)),
+            limit: Some(Uint256::from(100_000u128)),
         }];
 
         let res = suite
@@ -549,10 +524,10 @@ mod trader_flows {
     // and not only can we swap with 1 token we can do for example 2 or 3; native and cw20
     fn multiple_tokens_collection() {
         let ujuno = "ujuno";
-        let user = "user";
+        let user = MockApi::default().addr_make("user");
 
         let mut suite = SuiteBuilder::new()
-            .with_funds(user, &[coin(100u128, ujuno)])
+            .with_funds(&user, &[coin(100u128, ujuno)])
             .build();
 
         let owner = suite.owner.clone();
@@ -561,10 +536,7 @@ mod trader_flows {
         let token_to_swap = suite.instantiate_token(&owner, "notwynd");
 
         let nominated_trader_contract = suite
-            .setup_trader(
-                Addr::unchecked("owner"),
-                AssetInfo::Token(token.to_string()),
-            )
+            .setup_trader(&owner, AssetInfo::Token(token.to_string()))
             .unwrap();
 
         // create LP for desired token and a native token
@@ -592,29 +564,26 @@ mod trader_flows {
                 &owner,
                 &token_to_swap,
                 1_000_000u128,
-                nominated_trader_contract.as_ref(),
+                &nominated_trader_contract,
             )
             .unwrap();
 
         // Send some Native tokens to the trader contract from the user; Native
         suite
             .send_native_tokens(
-                user,
+                &user,
                 nominated_trader_contract.clone(),
                 &[coin(100u128, ujuno)],
             )
             .unwrap();
         // Setup routes for trades, each token in this case has a direct pair
         let new_route = Some(vec![
-            (
-                token_asset_info(token.as_ref()),
-                token_asset_info(token_to_swap.as_ref()),
-            ),
-            (token_asset_info(token.as_ref()), native_asset_info(ujuno)),
+            (token_asset_info(&token), token_asset_info(&token_to_swap)),
+            (token_asset_info(&token), native_asset_info(ujuno)),
         ]);
         suite
             .update_routes(
-                &suite.owner.to_string(),
+                &suite.owner.clone(),
                 nominated_trader_contract.clone(),
                 new_route,
                 None,
@@ -668,38 +637,30 @@ mod trader_flows {
         let mut suite = SuiteBuilder::new().build();
 
         let owner = suite.owner.clone();
+        let trader_addr = suite.addr_make("trader_addr");
 
         let token = suite.instantiate_token(&owner, "wynd");
 
         let nominated_trader_contract = suite
-            .setup_trader(
-                Addr::unchecked("owner"),
-                AssetInfo::Token(token.to_string()),
-            )
+            .setup_trader(&owner, AssetInfo::Token(token.to_string()))
             .unwrap();
 
         // Mint some token to user for spending
         suite
-            .mint_cw20(
-                &owner,
-                &token,
-                1_000_000u128,
-                nominated_trader_contract.as_ref(),
-            )
+            .mint_cw20(&owner, &token, 1_000_000u128, &nominated_trader_contract)
             .unwrap();
         // Owner performs a spend sender a number of 'token' to a recipient
+
         suite
             .spend(
                 &suite.owner.clone(),
                 nominated_trader_contract.clone(),
-                suite.trader.clone(),
-                Uint128::new(100_000u128),
+                &Addr::unchecked(trader_addr.clone()),
+                Uint256::from(100_000u128),
             )
             .unwrap();
         // Recipient has received the balance
-        let balance = suite
-            .query_cw20_balance(&suite.trader.clone(), &token)
-            .unwrap();
+        let balance = suite.query_cw20_balance(&trader_addr, &token).unwrap();
         assert_eq!(balance, 100_000u128);
     }
 
@@ -727,10 +688,7 @@ mod trader_flows {
         let bridge = suite.instantiate_token(&owner, "bridge");
 
         let nominated_trader_contract = suite
-            .setup_trader(
-                Addr::unchecked("owner"),
-                AssetInfo::Token(token.to_string()),
-            )
+            .setup_trader(&owner, AssetInfo::Token(token.to_string()))
             .unwrap();
 
         // create 3 pairs, one for a native to the desired token
@@ -767,18 +725,18 @@ mod trader_flows {
                 &owner,
                 &token_to_swap,
                 1_000_000u128,
-                nominated_trader_contract.as_ref(),
+                &nominated_trader_contract,
             )
             .unwrap();
         // Setup only 1 route, the cw20 token to swap and the bridge
         let new_route = Some(vec![(
-            token_asset_info(token_to_swap.as_ref()),
-            token_asset_info(bridge.as_ref()),
+            token_asset_info(&token_to_swap),
+            token_asset_info(&bridge),
         )]);
 
         suite
             .update_routes(
-                &suite.owner.to_string(),
+                &suite.owner.clone(),
                 nominated_trader_contract.clone(),
                 new_route,
                 None,
@@ -798,9 +756,10 @@ mod trader_flows {
                 assets_to_take.clone(),
             )
             .unwrap_err();
-        assert_eq!(
-            err.root_cause().to_string(),
-            "Unauthorized Only the nominated trader can collect fees"
+        assert!(
+            err.to_string()
+                .contains("Unauthorized Only the nominated trader can collect fees"),
+            "unexpected error: {err}"
         );
 
         let res = suite

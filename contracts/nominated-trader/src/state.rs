@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, Decimal};
+use cosmwasm_std::{Addr, Decimal256};
 use cw_storage_plus::{Item, Map};
 use wyndex::asset::{AssetInfo, AssetInfoValidated};
 
@@ -16,7 +16,7 @@ pub struct Config {
     /// The Wyndex factory contract address
     pub dex_factory_contract: Addr,
     /// The maximum spread used when swapping fee tokens to WYND
-    pub max_spread: Decimal,
+    pub max_spread: Decimal256,
 }
 
 /// Stores the contract configuration at the given key

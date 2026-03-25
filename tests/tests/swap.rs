@@ -7,7 +7,7 @@ use wyndex_multi_hop::msg::SwapOperation;
 fn trading_frozen() {
     let ujuno = "ujuno";
     let uluna = "uluna";
-    let user = "user";
+   let user = MockApi::default().addr_make("user");
 
     let ujuno_info = AssetInfo::Native(ujuno.to_string());
     let uluna_info = AssetInfo::Native(uluna.to_string());
@@ -58,7 +58,7 @@ fn trading_frozen() {
 fn custom_fee_works() {
     let ujuno = "ujuno";
     let uluna = "uluna";
-    let user = "user";
+   let user = MockApi::default().addr_make("user");
 
     let ujuno_info = AssetInfo::Native(ujuno.to_string());
     let uluna_info = AssetInfo::Native(uluna.to_string());

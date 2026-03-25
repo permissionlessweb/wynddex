@@ -1,7 +1,7 @@
 use cosmwasm_std::testing::{MockApi, MockQuerier, MockStorage, MOCK_CONTRACT_ADDR};
 use cosmwasm_std::{
     from_json, to_json_binary, Coin, Empty, OwnedDeps, Querier, QuerierResult, QueryRequest,
-    SystemError, SystemResult, Uint128, WasmQuery,
+    SystemError, SystemResult, Uint128, Uint256, WasmQuery,
 };
 
 use std::collections::HashMap;
@@ -16,7 +16,7 @@ pub fn mock_dependencies(
     contract_balance: &[Coin],
 ) -> OwnedDeps<MockStorage, MockApi, WasmMockQuerier> {
     let custom_querier: WasmMockQuerier =
-        WasmMockQuerier::new(MockQuerier::new(&[(MOCK_CONTRACT_ADDR, contract_balance)]));
+        WasmMockQuerier::new(MockQuerier::new(&[(&MOCK_CONTRACT_ADDR, contract_balance)]));
 
     OwnedDeps {
         storage: MockStorage::default(),
@@ -140,7 +140,7 @@ impl CW20QueryHandler {
                                 name: "mAPPL".to_string(),
                                 symbol: "mAPPL".to_string(),
                                 decimals: 6,
-                                total_supply,
+                                total_supply: total_supply.into(),
                             })
                             .into(),
                         )
@@ -162,7 +162,10 @@ impl CW20QueryHandler {
                         };
 
                         SystemResult::Ok(
-                            to_json_binary(&BalanceResponse { balance: *balance }).into(),
+                            to_json_binary(&BalanceResponse {
+                                balance: Uint256::from(balance.u128()),
+                            })
+                            .into(),
                         )
                     }
                     _ => panic!("DO NOT ENTER HERE"),

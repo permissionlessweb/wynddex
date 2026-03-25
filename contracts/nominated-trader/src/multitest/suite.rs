@@ -1,6 +1,7 @@
 use anyhow::Result as AnyResult;
 
-use cosmwasm_std::{coin, Addr, Coin, Decimal, Uint128};
+use cosmwasm_std::testing::MockApi;
+use cosmwasm_std::{coin, Addr, Coin, Decimal256, Uint128, Uint256};
 use cw20::{BalanceResponse, Cw20ExecuteMsg, Cw20QueryMsg, MinterResponse};
 use cw20_base::msg::InstantiateMsg as Cw20BaseInstantiateMsg;
 use cw_multi_test::{App, AppResponse, BankSudo, ContractWrapper, Executor, SudoMsg};
@@ -84,16 +85,16 @@ impl SuiteBuilder {
         Self { funds: vec![] }
     }
 
-    pub fn with_funds(mut self, addr: &str, funds: &[Coin]) -> Self {
-        self.funds.push((Addr::unchecked(addr), funds.into()));
+    pub fn with_funds(mut self, addr: &Addr, funds: &[Coin]) -> Self {
+        self.funds.push((addr.to_owned(), funds.into()));
         self
     }
 
     #[track_caller]
     pub fn build(self) -> Suite {
         let mut app = App::default();
-        let owner = Addr::unchecked("owner");
-        let trader: Addr = Addr::unchecked("trader");
+        let owner = app.api().addr_make("owner");
+        let trader = app.api().addr_make("trader");
 
         let cw20_code_id = store_cw20(&mut app);
         let pair_code_id = store_pair(&mut app);
@@ -128,11 +129,11 @@ impl SuiteBuilder {
                     token_code_id: cw20_code_id,
                     fee_address: None,
                     owner: owner.to_string(),
-                    max_referral_commission: Decimal::one(),
+                    max_referral_commission: Decimal256::one(),
                     default_stake_config: DefaultStakeConfig {
                         staking_code_id,
-                        tokens_per_power: Uint128::new(1000),
-                        min_bond: Uint128::new(1000),
+                        tokens_per_power: Uint256::from(1000u128),
+                        min_bond: Uint256::from(1000u128),
                         unbonding_periods: vec![1],
                         max_distributions: 6,
                         converter: None,
@@ -148,7 +149,10 @@ impl SuiteBuilder {
         let funds = self.funds;
         app.init_modules(|router, _, storage| -> AnyResult<()> {
             for (addr, coin) in funds {
-                router.bank.init_balance(storage, &addr, coin)?;
+                router
+                    .bank
+                    .init_balance(storage, &addr, coin)
+                    .map_err(|e| anyhow::anyhow!("{e}"))?;
             }
             Ok(())
         })
@@ -157,8 +161,8 @@ impl SuiteBuilder {
         let trader_id = contract_trader(&mut app);
 
         Suite {
-            owner: owner.to_string(),
-            trader: trader.to_string(),
+            owner,
+            trader,
             app,
             factory,
             cw20_code_id,
@@ -168,8 +172,8 @@ impl SuiteBuilder {
 }
 
 pub struct Suite {
-    pub owner: String,
-    pub trader: String,
+    pub owner: Addr,
+    pub trader: Addr,
     app: App,
     factory: Addr,
     cw20_code_id: u64,
@@ -177,19 +181,25 @@ pub struct Suite {
 }
 
 impl Suite {
-    pub fn setup_trader(&mut self, sender: Addr, desired_token_info: AssetInfo) -> AnyResult<Addr> {
+    pub fn setup_trader(
+        &mut self,
+        sender: &Addr,
+        desired_token_info: AssetInfo,
+    ) -> AnyResult<Addr> {
+        let owner_addr = self.app.api().addr_make("owner");
+        let beneficiary_addr = self.app.api().addr_make("beneficiary");
         let trader_contract = self
             .app
             .instantiate_contract(
                 self.trader_id,
-                sender,
+                sender.to_owned(),
                 &TraderInstantiateMsg {
-                    owner: self.owner.to_string(),
+                    owner: owner_addr.to_string(),
                     nominated_trader: self.trader.to_string(),
-                    beneficiary: Addr::unchecked("beneficiary").to_string(),
+                    beneficiary: beneficiary_addr.to_string(),
                     token_contract: desired_token_info,
                     dex_factory_contract: self.factory.to_string(),
-                    max_spread: Some(Decimal::percent(50)),
+                    max_spread: Some(Decimal256::percent(50)),
                 },
                 &[],
                 "trader",
@@ -201,33 +211,42 @@ impl Suite {
 
     pub fn update_routes(
         &mut self,
-        sender: &str,
+        sender: &Addr,
         trader_contract: Addr,
         add: Option<Vec<(AssetInfo, AssetInfo)>>,
         remove: Option<Vec<AssetInfo>>,
     ) -> AnyResult<AppResponse> {
-        let res = self.app.execute_contract(
-            Addr::unchecked(sender),
-            trader_contract,
-            &crate::msg::ExecuteMsg::UpdateRoutes { add, remove },
-            &[],
-        )?;
+        let res = self
+            .app
+            .execute_contract(
+                sender.to_owned(),
+                trader_contract,
+                &crate::msg::ExecuteMsg::UpdateRoutes { add, remove },
+                &[],
+            )
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
         Ok(res)
     }
 
     pub fn spend(
         &mut self,
-        sender: &str,
+        sender: &Addr,
         trader_contract: Addr,
-        recipient: String,
-        amount: Uint128,
+        recipient: &Addr,
+        amount: Uint256,
     ) -> AnyResult<AppResponse> {
-        let res = self.app.execute_contract(
-            Addr::unchecked(sender),
-            trader_contract,
-            &crate::msg::ExecuteMsg::Transfer { recipient, amount },
-            &[],
-        )?;
+        let res = self
+            .app
+            .execute_contract(
+                sender.to_owned(),
+                trader_contract,
+                &crate::msg::ExecuteMsg::Transfer {
+                    recipient: recipient.to_string(),
+                    amount,
+                },
+                &[],
+            )
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
         Ok(res)
     }
 
@@ -236,107 +255,125 @@ impl Suite {
         address: &Addr,
         balances_to_query: Vec<AssetInfo>,
     ) -> AnyResult<TraderBalancesResponse> {
-        let balance: TraderBalancesResponse = self.app.wrap().query_wasm_smart(
-            address,
-            &TraderQueryMsg::Balances {
-                assets: balances_to_query,
-            },
-        )?;
+        let balance: TraderBalancesResponse = self
+            .app
+            .wrap()
+            .query_wasm_smart(
+                address,
+                &TraderQueryMsg::Balances {
+                    assets: balances_to_query,
+                },
+            )
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
         Ok(balance)
     }
 
     pub fn send_native_tokens(
         &mut self,
-        sender: &str,
+        sender: &Addr,
         trader_contract: Addr,
         amount: &[Coin],
     ) -> AnyResult<AppResponse> {
         let res = self
             .app
-            .send_tokens(Addr::unchecked(sender), trader_contract, amount)?;
+            .send_tokens(sender.to_owned(), trader_contract, amount)
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
         Ok(res)
     }
 
     pub fn trade_collected_assets(
         &mut self,
-        sender: &str,
+        sender: &Addr,
         trader_contract: Addr,
         assets: Vec<AssetWithLimit>,
     ) -> AnyResult<AppResponse> {
-        let res = self.app.execute_contract(
-            Addr::unchecked(sender),
-            trader_contract,
-            &crate::msg::ExecuteMsg::Collect { assets },
-            &[],
-        )?;
+        let res = self
+            .app
+            .execute_contract(
+                sender.to_owned(),
+                trader_contract,
+                &crate::msg::ExecuteMsg::Collect { assets },
+                &[],
+            )
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
         Ok(res)
     }
 
     fn create_pair(
         &mut self,
-        sender: &str,
+        sender: &Addr,
         pair_type: PairType,
         tokens: [AssetInfo; 2],
     ) -> AnyResult<Addr> {
-        self.app.execute_contract(
-            Addr::unchecked(sender),
-            self.factory.clone(),
-            &FactoryExecuteMsg::CreatePair {
-                pair_type,
-                asset_infos: tokens.to_vec(),
-                init_params: None,
-                staking_config: PartialStakeConfig::default(),
-                total_fee_bps: None,
-            },
-            &[],
-        )?;
+        self.app
+            .execute_contract(
+                sender.to_owned(),
+                self.factory.clone(),
+                &FactoryExecuteMsg::CreatePair {
+                    pair_type,
+                    asset_infos: tokens.to_vec(),
+                    init_params: None,
+                    staking_config: PartialStakeConfig::default(),
+                    total_fee_bps: None,
+                },
+                &[],
+            )
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
 
         let factory = self.factory.clone();
-        let res: PairInfo = self.app.wrap().query_wasm_smart(
-            Addr::unchecked(factory),
-            &FactoryQueryMsg::Pair {
-                asset_infos: tokens.to_vec(),
-            },
-        )?;
+        let res: PairInfo = self
+            .app
+            .wrap()
+            .query_wasm_smart(
+                factory,
+                &FactoryQueryMsg::Pair {
+                    asset_infos: tokens.to_vec(),
+                },
+            )
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
         Ok(res.contract_addr)
     }
 
     fn provide_liquidity(
         &mut self,
-        owner: &str,
+        owner: &Addr,
         pair: &Addr,
         assets: [Asset; 2],
         send_funds: &[Coin],
     ) -> AnyResult<AppResponse> {
-        self.app.execute_contract(
-            Addr::unchecked(owner),
-            pair.clone(),
-            &PairExecuteMsg::ProvideLiquidity {
-                assets: assets.to_vec(),
-                slippage_tolerance: None,
-                receiver: None,
-            },
-            send_funds,
-        )
+        self.app
+            .execute_contract(
+                owner.to_owned(),
+                pair.clone(),
+                &PairExecuteMsg::ProvideLiquidity {
+                    assets: assets.to_vec(),
+                    slippage_tolerance: None,
+                    receiver: None,
+                },
+                send_funds,
+            )
+            .map_err(|e| anyhow::anyhow!("{e}"))
     }
 
     fn increase_allowance(
         &mut self,
-        owner: &str,
+        owner: &Addr,
         contract: &Addr,
         spender: &str,
         amount: u128,
     ) -> AnyResult<AppResponse> {
-        self.app.execute_contract(
-            Addr::unchecked(owner),
-            contract.clone(),
-            &Cw20ExecuteMsg::IncreaseAllowance {
-                spender: spender.to_owned(),
-                amount: amount.into(),
-                expires: None,
-            },
-            &[],
-        )
+        self.app
+            .execute_contract(
+                owner.to_owned(),
+                contract.clone(),
+                &Cw20ExecuteMsg::IncreaseAllowance {
+                    spender: spender.to_owned(),
+                    amount: amount.into(),
+                    expires: None,
+                },
+                &[],
+            )
+            .map_err(|e| anyhow::anyhow!("{e}"))
     }
 
     /// Create LP for provided assets and provides some liquidity to them.
@@ -349,7 +386,7 @@ impl Suite {
         native_tokens: Vec<Coin>,
     ) -> AnyResult<Addr> {
         let owner = self.owner.clone();
-        let whale = "whale";
+        let whale = self.app.api().addr_make("whale");
 
         let pair = self.create_pair(
             &owner,
@@ -360,12 +397,12 @@ impl Suite {
         match first_asset.0.clone() {
             AssetInfo::Token(addr) => {
                 // Mint some initial balances for whale user
-                self.mint_cw20(&owner, &Addr::unchecked(&addr), first_asset.1, whale)
+                self.mint_cw20(&owner, &Addr::unchecked(&addr), first_asset.1, &whale)
                     .unwrap();
                 // Increases allowances for given LP contracts in order to provide liquidity to pool
                 self.increase_allowance(
-                    whale,
-                    &Addr::unchecked(addr),
+                    &whale,
+                    &Addr::unchecked(&addr),
                     pair.as_str(),
                     first_asset.1,
                 )
@@ -374,7 +411,7 @@ impl Suite {
             AssetInfo::Native(denom) => {
                 self.app
                     .sudo(SudoMsg::Bank(BankSudo::Mint {
-                        to_address: whale.to_owned(),
+                        to_address: whale.to_string(),
                         amount: vec![coin(first_asset.1, denom)],
                     }))
                     .unwrap();
@@ -383,12 +420,12 @@ impl Suite {
         match second_asset.0.clone() {
             AssetInfo::Token(addr) => {
                 // Mint some initial balances for whale user
-                self.mint_cw20(&owner, &Addr::unchecked(&addr), second_asset.1, whale)
+                self.mint_cw20(&owner, &Addr::unchecked(&addr), second_asset.1, &whale)
                     .unwrap();
                 // Increases allowances for given LP contracts in order to provide liquidity to pool
                 self.increase_allowance(
-                    whale,
-                    &Addr::unchecked(addr),
+                    &whale,
+                    &Addr::unchecked(&addr),
                     pair.as_str(),
                     second_asset.1,
                 )
@@ -397,7 +434,7 @@ impl Suite {
             AssetInfo::Native(denom) => {
                 self.app
                     .sudo(SudoMsg::Bank(BankSudo::Mint {
-                        to_address: whale.to_owned(),
+                        to_address: whale.to_string(),
                         amount: vec![coin(second_asset.1, denom)],
                     }))
                     .unwrap();
@@ -405,7 +442,7 @@ impl Suite {
         };
 
         self.provide_liquidity(
-            whale,
+            &whale,
             &pair,
             [
                 Asset {
@@ -424,11 +461,11 @@ impl Suite {
         Ok(pair)
     }
 
-    pub fn instantiate_token(&mut self, owner: &str, token: &str) -> Addr {
+    pub fn instantiate_token(&mut self, owner: &Addr, token: &str) -> Addr {
         self.app
             .instantiate_contract(
                 self.cw20_code_id,
-                Addr::unchecked(owner),
+                owner.clone(),
                 &Cw20BaseInstantiateMsg {
                     name: token.to_owned(),
                     symbol: token.to_owned(),
@@ -449,36 +486,48 @@ impl Suite {
 
     pub fn mint_cw20(
         &mut self,
-        owner: &str,
+        owner: &Addr,
         token: &Addr,
         amount: u128,
-        recipient: &str,
+        recipient: &Addr,
     ) -> AnyResult<AppResponse> {
-        self.app.execute_contract(
-            Addr::unchecked(owner),
-            token.clone(),
-            &Cw20ExecuteMsg::Mint {
-                recipient: recipient.to_owned(),
-                amount: amount.into(),
-            },
-            &[],
-        )
+        self.app
+            .execute_contract(
+                owner.to_owned(),
+                token.clone(),
+                &Cw20ExecuteMsg::Mint {
+                    recipient: recipient.to_string(),
+                    amount: amount.into(),
+                },
+                &[],
+            )
+            .map_err(|e| anyhow::anyhow!("{e}"))
     }
 
     pub fn query_cw20_balance(&self, sender: &str, address: &Addr) -> AnyResult<u128> {
-        let balance: BalanceResponse = self.app.wrap().query_wasm_smart(
-            address,
-            &Cw20QueryMsg::Balance {
-                address: sender.to_owned(),
-            },
-        )?;
-        Ok(balance.balance.into())
+        let balance: BalanceResponse = self
+            .app
+            .wrap()
+            .query_wasm_smart(
+                address,
+                &Cw20QueryMsg::Balance {
+                    address: sender.to_owned(),
+                },
+            )
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
+        Ok(Uint128::try_from(balance.balance).unwrap().u128())
+    }
+
+    pub fn addr_make(&self, human: &str) -> String {
+        self.app.api().addr_make(human).to_string()
     }
 
     pub fn query_routes(&self, address: &Addr) -> AnyResult<Vec<(String, String)>> {
-        Ok(self
+        let routes: Vec<(String, String)> = self
             .app
             .wrap()
-            .query_wasm_smart(address, &TraderQueryMsg::Routes {})?)
+            .query_wasm_smart(address, &TraderQueryMsg::Routes {})
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
+        Ok(routes)
     }
 }

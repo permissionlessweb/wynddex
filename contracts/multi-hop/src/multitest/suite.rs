@@ -1,9 +1,11 @@
 use anyhow::Result as AnyResult;
 
-use cosmwasm_std::{coin, to_json_binary, Addr, Coin, Decimal, Uint128};
+use cosmwasm_std::testing::MockApi;
+use cosmwasm_std::{coin, to_json_binary, Addr, Coin, Decimal256, Uint128, Uint256};
 use cw20::{BalanceResponse, Cw20ExecuteMsg, Cw20QueryMsg, MinterResponse};
 use cw20_base::msg::InstantiateMsg as Cw20BaseInstantiateMsg;
 use cw_multi_test::{App, AppResponse, BankSudo, ContractWrapper, Executor, SudoMsg};
+use wyndex_test_helpers::TestAccounts;
 
 use crate::msg::{
     ExecuteMsg, InstantiateMsg, QueryMsg, SimulateSwapOperationsResponse, SwapOperation,
@@ -77,7 +79,7 @@ fn store_staking(app: &mut App) -> u64 {
 #[derive(Debug)]
 pub struct SuiteBuilder {
     funds: Vec<(Addr, Vec<Coin>)>,
-    max_referral_commission: Decimal,
+    max_referral_commission: Decimal256,
     stake_config: DefaultStakeConfig,
     total_fee_bps: u16,
     protocol_fee_bps: u16,
@@ -87,13 +89,13 @@ impl SuiteBuilder {
     pub fn new() -> Self {
         Self {
             funds: vec![],
-            max_referral_commission: Decimal::one(),
+            max_referral_commission: Decimal256::one(),
             total_fee_bps: 0,
             protocol_fee_bps: 0,
             stake_config: DefaultStakeConfig {
                 staking_code_id: 0, // will be set in build()
-                tokens_per_power: Uint128::new(1000),
-                min_bond: Uint128::new(1000),
+                tokens_per_power: Uint256::new(1000),
+                min_bond: Uint256::new(1000),
                 unbonding_periods: vec![
                     SECONDS_PER_DAY * 7,
                     SECONDS_PER_DAY * 14,
@@ -111,12 +113,12 @@ impl SuiteBuilder {
         self
     }
 
-    pub fn with_funds(mut self, addr: &str, funds: &[Coin]) -> Self {
-        self.funds.push((Addr::unchecked(addr), funds.into()));
+    pub fn with_funds(mut self, addr: &Addr, funds: &[Coin]) -> Self {
+        self.funds.push((addr.clone(), funds.into()));
         self
     }
 
-    pub fn with_max_referral_commission(mut self, max: Decimal) -> Self {
+    pub fn with_max_referral_commission(mut self, max: Decimal256) -> Self {
         self.max_referral_commission = max;
         self
     }
@@ -124,7 +126,8 @@ impl SuiteBuilder {
     #[track_caller]
     pub fn build(self) -> Suite {
         let mut app = App::default();
-        let owner = Addr::unchecked("owner");
+        let a = TestAccounts::new(&app.api());
+        let owner = a.owner.clone();
 
         let cw20_code_id = store_cw20(&mut app);
         let pair_code_id = store_pair(&mut app);
@@ -188,14 +191,17 @@ impl SuiteBuilder {
         let funds = self.funds;
         app.init_modules(|router, _, storage| -> AnyResult<()> {
             for (addr, coin) in funds {
-                router.bank.init_balance(storage, &addr, coin)?;
+                router
+                    .bank
+                    .init_balance(storage, &addr, coin)
+                    .map_err(|e| anyhow::anyhow!("{e}"))?;
             }
             Ok(())
         })
         .unwrap();
 
         Suite {
-            owner: owner.to_string(),
+            a: TestAccounts::new(App::default().api()),
             app,
             factory,
             multi_hop,
@@ -205,7 +211,7 @@ impl SuiteBuilder {
 }
 
 pub struct Suite {
-    pub owner: String,
+    pub a: TestAccounts,
     pub app: App,
     pub factory: Addr,
     multi_hop: Addr,
@@ -215,69 +221,79 @@ pub struct Suite {
 impl Suite {
     fn create_pair(
         &mut self,
-        sender: &str,
+        sender: &Addr,
         pair_type: PairType,
         tokens: [AssetInfo; 2],
     ) -> AnyResult<Addr> {
-        self.app.execute_contract(
-            Addr::unchecked(sender),
-            self.factory.clone(),
-            &FactoryExecuteMsg::CreatePair {
-                pair_type,
-                asset_infos: tokens.to_vec(),
-                init_params: None,
-                staking_config: Default::default(),
-                total_fee_bps: None,
-            },
-            &[],
-        )?;
+        self.app
+            .execute_contract(
+                sender.to_owned(),
+                self.factory.clone(),
+                &FactoryExecuteMsg::CreatePair {
+                    pair_type,
+                    asset_infos: tokens.to_vec(),
+                    init_params: None,
+                    staking_config: Default::default(),
+                    total_fee_bps: None,
+                },
+                &[],
+            )
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
 
         let factory = self.factory.clone();
-        let res: PairInfo = self.app.wrap().query_wasm_smart(
-            Addr::unchecked(factory),
-            &FactoryQueryMsg::Pair {
-                asset_infos: tokens.to_vec(),
-            },
-        )?;
+        let res: PairInfo = self
+            .app
+            .wrap()
+            .query_wasm_smart(
+                factory,
+                &FactoryQueryMsg::Pair {
+                    asset_infos: tokens.to_vec(),
+                },
+            )
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
         Ok(res.contract_addr)
     }
 
     fn provide_liquidity(
         &mut self,
-        owner: &str,
+        owner: &Addr,
         pair: &Addr,
         assets: [Asset; 2],
         send_funds: &[Coin],
     ) -> AnyResult<AppResponse> {
-        self.app.execute_contract(
-            Addr::unchecked(owner),
-            pair.clone(),
-            &PairExecuteMsg::ProvideLiquidity {
-                assets: assets.to_vec(),
-                slippage_tolerance: None,
-                receiver: None,
-            },
-            send_funds,
-        )
+        self.app
+            .execute_contract(
+                owner.to_owned(),
+                pair.clone(),
+                &PairExecuteMsg::ProvideLiquidity {
+                    assets: assets.to_vec(),
+                    slippage_tolerance: None,
+                    receiver: None,
+                },
+                send_funds,
+            )
+            .map_err(|e| anyhow::anyhow!("{e}"))
     }
 
     fn increase_allowance(
         &mut self,
-        owner: &str,
+        owner: &Addr,
         contract: &Addr,
         spender: &str,
         amount: u128,
     ) -> AnyResult<AppResponse> {
-        self.app.execute_contract(
-            Addr::unchecked(owner),
-            contract.clone(),
-            &Cw20ExecuteMsg::IncreaseAllowance {
-                spender: spender.to_owned(),
-                amount: amount.into(),
-                expires: None,
-            },
-            &[],
-        )
+        self.app
+            .execute_contract(
+                owner.to_owned(),
+                contract.clone(),
+                &Cw20ExecuteMsg::IncreaseAllowance {
+                    spender: spender.to_owned(),
+                    amount: amount.into(),
+                    expires: None,
+                },
+                &[],
+            )
+            .map_err(|e| anyhow::anyhow!("{e}"))
     }
 
     /// Create LP for provided assets and provides some liquidity to them.
@@ -289,8 +305,8 @@ impl Suite {
         second_asset: (AssetInfo, u128),
         native_tokens: Vec<Coin>,
     ) -> AnyResult<Addr> {
-        let owner = self.owner.clone();
-        let whale = "whale";
+        let owner = self.a.owner.clone();
+        let whale = self.a.whale.clone();
 
         let pair = self.create_pair(
             &owner,
@@ -301,12 +317,12 @@ impl Suite {
         match first_asset.0.clone() {
             AssetInfo::Token(addr) => {
                 // Mint some initial balances for whale user
-                self.mint_cw20(&owner, &Addr::unchecked(&addr), first_asset.1, whale)
+                self.mint_cw20(&owner, &Addr::unchecked(&addr), first_asset.1, &whale)
                     .unwrap();
                 // Increases allowances for given LP contracts in order to provide liquidity to pool
                 self.increase_allowance(
-                    whale,
-                    &Addr::unchecked(addr),
+                    &whale,
+                    &Addr::unchecked(&addr),
                     pair.as_str(),
                     first_asset.1,
                 )
@@ -315,7 +331,7 @@ impl Suite {
             AssetInfo::Native(denom) => {
                 self.app
                     .sudo(SudoMsg::Bank(BankSudo::Mint {
-                        to_address: whale.to_owned(),
+                        to_address: whale.to_string(),
                         amount: vec![coin(first_asset.1, denom)],
                     }))
                     .unwrap();
@@ -324,12 +340,12 @@ impl Suite {
         match second_asset.0.clone() {
             AssetInfo::Token(addr) => {
                 // Mint some initial balances for whale user
-                self.mint_cw20(&owner, &Addr::unchecked(&addr), second_asset.1, whale)
+                self.mint_cw20(&owner, &Addr::unchecked(&addr), second_asset.1, &whale)
                     .unwrap();
                 // Increases allowances for given LP contracts in order to provide liquidity to pool
                 self.increase_allowance(
-                    whale,
-                    &Addr::unchecked(addr),
+                    &whale,
+                    &Addr::unchecked(&addr),
                     pair.as_str(),
                     second_asset.1,
                 )
@@ -338,7 +354,7 @@ impl Suite {
             AssetInfo::Native(denom) => {
                 self.app
                     .sudo(SudoMsg::Bank(BankSudo::Mint {
-                        to_address: whale.to_owned(),
+                        to_address: whale.to_string(),
                         amount: vec![coin(second_asset.1, denom)],
                     }))
                     .unwrap();
@@ -346,7 +362,7 @@ impl Suite {
         };
 
         self.provide_liquidity(
-            whale,
+            &whale,
             &pair,
             [
                 Asset {
@@ -365,11 +381,11 @@ impl Suite {
         Ok(pair)
     }
 
-    pub fn instantiate_token(&mut self, owner: &str, token: &str) -> Addr {
+    pub fn instantiate_token(&mut self, owner: &Addr, token: &str) -> Addr {
         self.app
             .instantiate_contract(
                 self.cw20_code_id,
-                Addr::unchecked(owner),
+                owner.to_owned(),
                 &Cw20BaseInstantiateMsg {
                     name: token.to_owned(),
                     symbol: token.to_owned(),
@@ -390,25 +406,27 @@ impl Suite {
 
     pub fn mint_cw20(
         &mut self,
-        owner: &str,
+        owner: &Addr,
         token: &Addr,
         amount: u128,
-        recipient: &str,
+        recipient: &Addr,
     ) -> AnyResult<AppResponse> {
-        self.app.execute_contract(
-            Addr::unchecked(owner),
-            token.clone(),
-            &Cw20ExecuteMsg::Mint {
-                recipient: recipient.to_owned(),
-                amount: amount.into(),
-            },
-            &[],
-        )
+        self.app
+            .execute_contract(
+                owner.to_owned(),
+                token.clone(),
+                &Cw20ExecuteMsg::Mint {
+                    recipient: recipient.to_string(),
+                    amount: amount.into(),
+                },
+                &[],
+            )
+            .map_err(|e| anyhow::anyhow!("{e}"))
     }
 
     pub fn swap_operations(
         &mut self,
-        sender: &str,
+        sender: &Addr,
         amount: Coin,
         operations: Vec<SwapOperation>,
     ) -> AnyResult<AppResponse> {
@@ -417,30 +435,32 @@ impl Suite {
 
     pub fn swap_operations_ref(
         &mut self,
-        sender: &str,
+        sender: &Addr,
         amount: Coin,
         operations: Vec<SwapOperation>,
         referral_address: impl Into<Option<String>>,
-        referral_commission: impl Into<Option<Decimal>>,
+        referral_commission: impl Into<Option<Decimal256>>,
     ) -> AnyResult<AppResponse> {
-        self.app.execute_contract(
-            Addr::unchecked(sender),
-            self.multi_hop.clone(),
-            &ExecuteMsg::ExecuteSwapOperations {
-                operations,
-                minimum_receive: None,
-                receiver: None,
-                max_spread: None,
-                referral_address: referral_address.into(),
-                referral_commission: referral_commission.into(),
-            },
-            &[amount],
-        )
+        self.app
+            .execute_contract(
+                sender.to_owned(),
+                self.multi_hop.clone(),
+                &ExecuteMsg::ExecuteSwapOperations {
+                    operations,
+                    minimum_receive: None,
+                    receiver: None,
+                    max_spread: None,
+                    referral_address: referral_address.into(),
+                    referral_commission: referral_commission.into(),
+                },
+                &[amount],
+            )
+            .map_err(|e| anyhow::anyhow!("{e}"))
     }
 
     pub fn swap_operations_cw20(
         &mut self,
-        sender: &str,
+        sender: &Addr,
         token_in: &Addr,
         amount: u128,
         operations: Vec<SwapOperation>,
@@ -450,138 +470,163 @@ impl Suite {
 
     pub fn swap_operations_cw20_ref(
         &mut self,
-        sender: &str,
+        sender: &Addr,
         token_in: &Addr,
         amount: u128,
         operations: Vec<SwapOperation>,
         referral_address: impl Into<Option<String>>,
-        referral_commission: impl Into<Option<Decimal>>,
+        referral_commission: impl Into<Option<Decimal256>>,
     ) -> AnyResult<AppResponse> {
-        self.app.execute_contract(
-            Addr::unchecked(sender),
-            token_in.clone(),
-            &Cw20ExecuteMsg::Send {
-                contract: self.multi_hop.to_string(),
-                amount: amount.into(),
-                msg: to_json_binary(&ExecuteMsg::ExecuteSwapOperations {
-                    operations,
-                    minimum_receive: None,
-                    receiver: None,
-                    max_spread: None,
-                    referral_address: referral_address.into(),
-                    referral_commission: referral_commission.into(),
-                })
-                .unwrap(),
-            },
-            &[],
-        )
+        self.app
+            .execute_contract(
+                sender.to_owned(),
+                token_in.clone(),
+                &Cw20ExecuteMsg::Send {
+                    contract: self.multi_hop.to_string(),
+                    amount: amount.into(),
+                    msg: to_json_binary(&ExecuteMsg::ExecuteSwapOperations {
+                        operations,
+                        minimum_receive: None,
+                        receiver: None,
+                        max_spread: None,
+                        referral_address: referral_address.into(),
+                        referral_commission: referral_commission.into(),
+                    })
+                    .unwrap(),
+                },
+                &[],
+            )
+            .map_err(|e| anyhow::anyhow!("{e}"))
     }
 
     pub fn assert_minimum_receive(
         &mut self,
-        receiver: &str,
+        receiver: &Addr,
         asset_info: AssetInfo,
-        minimum_receive: impl Into<Uint128>,
+        minimum_receive: impl Into<Uint256>,
     ) -> AnyResult<AppResponse> {
-        self.app.execute_contract(
-            Addr::unchecked(receiver),
-            self.multi_hop.clone(),
-            &ExecuteMsg::AssertMinimumReceive {
-                asset_info,
-                prev_balance: Uint128::zero(),
-                minimum_receive: minimum_receive.into(),
-                receiver: receiver.into(),
-            },
-            &[],
-        )
+        self.app
+            .execute_contract(
+                Addr::unchecked(receiver),
+                self.multi_hop.clone(),
+                &ExecuteMsg::AssertMinimumReceive {
+                    asset_info,
+                    prev_balance: Uint256::zero(),
+                    minimum_receive: minimum_receive.into(),
+                    receiver: receiver.into(),
+                },
+                &[],
+            )
+            .map_err(|e| anyhow::anyhow!("{e}"))
     }
 
-    pub fn query_balance(&self, sender: &str, denom: &str) -> AnyResult<u128> {
+    pub fn query_balance(&self, sender: &Addr, denom: &str) -> AnyResult<u128> {
         let amount = self
             .app
             .wrap()
-            .query_balance(Addr::unchecked(sender), denom)?
+            .query_balance(sender, denom)
+            .map_err(|e| anyhow::anyhow!("{e}"))?
             .amount;
-        Ok(amount.into())
+        Ok(Uint128::try_from(amount).unwrap().u128())
     }
 
-    pub fn query_cw20_balance(&self, sender: &str, address: &Addr) -> AnyResult<u128> {
-        let balance: BalanceResponse = self.app.wrap().query_wasm_smart(
-            address,
-            &Cw20QueryMsg::Balance {
-                address: sender.to_owned(),
-            },
-        )?;
-        Ok(balance.balance.into())
+    pub fn query_cw20_balance(&self, sender: &Addr, address: &Addr) -> AnyResult<u128> {
+        let balance: BalanceResponse = self
+            .app
+            .wrap()
+            .query_wasm_smart(
+                address,
+                &Cw20QueryMsg::Balance {
+                    address: sender.to_string(),
+                },
+            )
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
+        Ok(Uint128::try_from(balance.balance).unwrap().u128())
     }
 
     pub fn query_simulate_swap_operations(
         &self,
-        offer_amount: impl Into<Uint128>,
+        offer_amount: impl Into<Uint256>,
         operations: Vec<SwapOperation>,
     ) -> AnyResult<SimulateSwapOperationsResponse> {
-        let res: SimulateSwapOperationsResponse = self.app.wrap().query_wasm_smart(
-            self.multi_hop.clone(),
-            &QueryMsg::SimulateSwapOperations {
-                offer_amount: offer_amount.into(),
-                operations,
-                referral: false,
-                referral_commission: None,
-            },
-        )?;
+        let res: SimulateSwapOperationsResponse = self
+            .app
+            .wrap()
+            .query_wasm_smart(
+                self.multi_hop.clone(),
+                &QueryMsg::SimulateSwapOperations {
+                    offer_amount: offer_amount.into(),
+                    operations,
+                    referral: false,
+                    referral_commission: None,
+                },
+            )
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
         Ok(res)
     }
 
     pub fn query_simulate_swap_operations_ref(
         &self,
-        offer_amount: impl Into<Uint128>,
+        offer_amount: impl Into<Uint256>,
         operations: Vec<SwapOperation>,
-        referral_commission: impl Into<Option<Decimal>>,
+        referral_commission: impl Into<Option<Decimal256>>,
     ) -> AnyResult<SimulateSwapOperationsResponse> {
-        let res: SimulateSwapOperationsResponse = self.app.wrap().query_wasm_smart(
-            self.multi_hop.clone(),
-            &QueryMsg::SimulateSwapOperations {
-                offer_amount: offer_amount.into(),
-                operations,
-                referral: true,
-                referral_commission: referral_commission.into(),
-            },
-        )?;
+        let res: SimulateSwapOperationsResponse = self
+            .app
+            .wrap()
+            .query_wasm_smart(
+                self.multi_hop.clone(),
+                &QueryMsg::SimulateSwapOperations {
+                    offer_amount: offer_amount.into(),
+                    operations,
+                    referral: true,
+                    referral_commission: referral_commission.into(),
+                },
+            )
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
         Ok(res)
     }
 
     pub fn query_simulate_reverse_swap_operations(
         &self,
-        ask_amount: impl Into<Uint128>,
+        ask_amount: impl Into<Uint256>,
         operations: Vec<SwapOperation>,
     ) -> AnyResult<SimulateSwapOperationsResponse> {
-        let res: SimulateSwapOperationsResponse = self.app.wrap().query_wasm_smart(
-            self.multi_hop.clone(),
-            &QueryMsg::SimulateReverseSwapOperations {
-                ask_amount: ask_amount.into(),
-                operations,
-                referral: false,
-                referral_commission: None,
-            },
-        )?;
+        let res: SimulateSwapOperationsResponse = self
+            .app
+            .wrap()
+            .query_wasm_smart(
+                self.multi_hop.clone(),
+                &QueryMsg::SimulateReverseSwapOperations {
+                    ask_amount: ask_amount.into(),
+                    operations,
+                    referral: false,
+                    referral_commission: None,
+                },
+            )
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
         Ok(res)
     }
 
     pub fn query_simulate_reverse_swap_operations_ref(
         &self,
-        ask_amount: impl Into<Uint128>,
+        ask_amount: impl Into<Uint256>,
         operations: Vec<SwapOperation>,
-        referral_commission: impl Into<Option<Decimal>>,
+        referral_commission: impl Into<Option<Decimal256>>,
     ) -> AnyResult<SimulateSwapOperationsResponse> {
-        let res: SimulateSwapOperationsResponse = self.app.wrap().query_wasm_smart(
-            self.multi_hop.clone(),
-            &QueryMsg::SimulateReverseSwapOperations {
-                ask_amount: ask_amount.into(),
-                operations,
-                referral: true,
-                referral_commission: referral_commission.into(),
-            },
-        )?;
+        let res: SimulateSwapOperationsResponse = self
+            .app
+            .wrap()
+            .query_wasm_smart(
+                self.multi_hop.clone(),
+                &QueryMsg::SimulateReverseSwapOperations {
+                    ask_amount: ask_amount.into(),
+                    operations,
+                    referral: true,
+                    referral_commission: referral_commission.into(),
+                },
+            )
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
         Ok(res)
     }
 }

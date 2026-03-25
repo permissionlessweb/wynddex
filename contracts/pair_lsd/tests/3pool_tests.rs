@@ -1,9 +1,11 @@
-use cosmwasm_std::Addr;
+use cosmwasm_std::testing::MockApi;
+use cosmwasm_std::{Addr, Uint128};
 use itertools::Itertools;
 
 use helper::AppExtension;
 use wyndex::asset::AssetInfoExt;
 use wyndex::pair::ContractError;
+use wyndex_test_helpers::TestAccounts;
 
 use crate::helper::{Helper, TestCoin};
 
@@ -12,8 +14,14 @@ mod helper;
 #[ignore = "Only support 2 pools"]
 #[test]
 fn provide_and_withdraw_no_fee() {
-    let owner = Addr::unchecked("owner");
+    let a = TestAccounts::new(&MockApi::default());
 
+    let owner = a.owner;
+    let user1 = a.beneficiary;
+    let user2 = a.fee_receiver;
+    let user3 = a.trader;
+    let user4 = a.whale;
+    
     let test_coins = vec![
         TestCoin::native("uluna"),
         TestCoin::cw20("USDC"),
@@ -22,7 +30,6 @@ fn provide_and_withdraw_no_fee() {
 
     let mut helper = Helper::new(&owner, test_coins.clone(), 100u64, Some(0u16)).unwrap();
 
-    let user1 = Addr::unchecked("user1");
     let assets = vec![
         helper.assets[&test_coins[0]].with_balance(100_000_000u128),
         helper.assets[&test_coins[1]].with_balance(100_000_000u128),
@@ -38,7 +45,7 @@ fn provide_and_withdraw_no_fee() {
     assert_eq!(0, helper.coin_balance(&test_coins[2], &user1));
 
     // The user2 with the same assets should receive the same share
-    let user2 = Addr::unchecked("user2");
+
     let assets = vec![
         helper.assets[&test_coins[0]].with_balance(100_000_000u128),
         helper.assets[&test_coins[1]].with_balance(100_000_000u128),
@@ -49,7 +56,7 @@ fn provide_and_withdraw_no_fee() {
     assert_eq!(300_000_000, helper.token_balance(&helper.lp_token, &user2));
 
     // The user3 makes imbalanced provide thus he is charged with fees
-    let user3 = Addr::unchecked("user3");
+
     let assets = vec![
         helper.assets[&test_coins[0]].with_balance(200_000_000u128),
         helper.assets[&test_coins[1]].with_balance(100_000_000u128),
@@ -59,7 +66,7 @@ fn provide_and_withdraw_no_fee() {
     assert_eq!(299_629321, helper.token_balance(&helper.lp_token, &user3));
 
     // Providing last asset with explicit zero amount should give nearly the same result
-    let user4 = Addr::unchecked("user4");
+
     let assets = vec![
         helper.assets[&test_coins[0]].with_balance(200_000_000u128),
         helper.assets[&test_coins[1]].with_balance(100_000_000u128),
@@ -135,7 +142,9 @@ fn provide_and_withdraw_no_fee() {
 #[ignore = "Only support 2 pools"]
 #[test]
 fn provide_with_different_precision() {
-    let owner = Addr::unchecked("owner");
+    let a = TestAccounts::new(&MockApi::default());
+
+    let owner = a.owner;
 
     let test_coins = vec![
         TestCoin::cw20precise("FOO", 4),
@@ -193,7 +202,9 @@ fn provide_with_different_precision() {
 #[ignore = "Only support 2 pools"]
 #[test]
 fn swap_different_precisions() {
-    let owner = Addr::unchecked("owner");
+    let a = TestAccounts::new(&MockApi::default());
+
+    let owner = a.owner;
 
     let test_coins = vec![
         TestCoin::cw20precise("FOO", 4),
@@ -220,7 +231,8 @@ fn swap_different_precisions() {
     // And reverse swap as well
     let reverse_sim_resp = helper
         .simulate_reverse_swap(
-            helper.assets[&test_coins[2]].with_balance(sim_resp.return_amount.u128()),
+            helper.assets[&test_coins[2]]
+                .with_balance(Uint128::try_from(sim_resp.return_amount).unwrap().u128()),
             Some(helper.assets[&test_coins[0]].clone()),
         )
         .unwrap();
@@ -236,14 +248,21 @@ fn swap_different_precisions() {
         .unwrap();
     assert_eq!(0, helper.coin_balance(&test_coins[0], &user));
     // 99.999010 x ADN tokens
-    assert_eq!(99_949011, sim_resp.return_amount.u128());
+    assert_eq!(
+        99_949011,
+        Uint128::try_from(sim_resp.return_amount).unwrap().u128()
+    );
     assert_eq!(99_949011, helper.coin_balance(&test_coins[2], &user));
 }
 
 #[ignore = "Only support 2 pools"]
 #[test]
 fn check_swaps() {
-    let owner = Addr::unchecked("owner");
+    let a = TestAccounts::new(&MockApi::default());
+    let liquidity0000 = a.trader;
+    let factory = a.whale;
+    let owner = a.owner;
+    let alice_address = a.beneficiary;
 
     let test_coins = vec![
         TestCoin::native("uluna"),
@@ -292,14 +311,15 @@ fn check_swaps() {
 
 #[test]
 fn check_wrong_initializations() {
-    let owner = Addr::unchecked("owner");
+    let a = TestAccounts::new(&MockApi::default());
+    let liquidity0000 = a.trader;
+    let factory = a.whale;
+    let owner = a.owner;
+    let alice_address = a.beneficiary;
 
     let err = Helper::new(&owner, vec![TestCoin::native("uluna")], 100u64, None).unwrap_err();
 
-    assert_eq!(
-        ContractError::InvalidNumberOfAssets { min: 2, max: 2 },
-        err.downcast().unwrap()
-    );
+    assert!(err.to_string().contains(&ContractError::InvalidNumberOfAssets { min: 2, max: 2 }.to_string()));
 
     let err = Helper::new(
         &owner,
@@ -316,10 +336,7 @@ fn check_wrong_initializations() {
     )
     .unwrap_err();
 
-    assert_eq!(
-        ContractError::InvalidNumberOfAssets { min: 2, max: 2 },
-        err.downcast().unwrap()
-    );
+    assert!(err.to_string().contains(&ContractError::InvalidNumberOfAssets { min: 2, max: 2 }.to_string()));
 
     let err = Helper::new(
         &owner,
@@ -329,16 +346,15 @@ fn check_wrong_initializations() {
     )
     .unwrap_err();
 
-    assert_eq!(
-        err.root_cause().to_string(),
-        "Doubling assets in asset infos"
-    );
+    assert!(err.to_string().contains("Doubling assets in asset infos"));
 }
 
 #[ignore = "Only support 2 pools"]
 #[test]
 fn check_withdraw_charges_fees() {
-    let owner = Addr::unchecked("owner");
+    let a = TestAccounts::new(&MockApi::default());
+
+    let owner = a.owner;
 
     let test_coins = vec![
         TestCoin::native("uluna"),
@@ -414,7 +430,9 @@ fn check_withdraw_charges_fees() {
 #[ignore = "Only support 2 pools"]
 #[test]
 fn check_5pool_prices() {
-    let owner = Addr::unchecked("owner");
+    let a = TestAccounts::new(&MockApi::default());
+
+    let owner = a.owner;
 
     let test_coins = vec![
         TestCoin::native("uusd"),

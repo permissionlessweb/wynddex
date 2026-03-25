@@ -1,9 +1,9 @@
 use crate::state::{Config, CIRCUIT_BREAKER, CONFIG, FROZEN};
 
 use cosmwasm_std::{
-    attr, ensure, entry_point, from_json, to_json_binary, Addr, Binary, CosmosMsg, Decimal,
-    Decimal256, Deps, DepsMut, Env, Isqrt, MessageInfo, QuerierWrapper, Reply, Response, StdError,
-    StdResult, Uint128, Uint256, WasmMsg,
+    attr, ensure, entry_point, from_json, to_json_binary, Addr, Binary, CosmosMsg, Decimal256,
+    Deps, DepsMut, Env, Isqrt, MessageInfo, QuerierWrapper, Reply, Response, StdError, StdResult,
+    Uint256, WasmMsg,
 };
 
 use cw2::set_contract_version;
@@ -73,8 +73,8 @@ pub fn instantiate(
         },
         factory_addr,
         block_time_last: 0,
-        price0_cumulative_last: Uint128::zero(),
-        price1_cumulative_last: Uint128::zero(),
+        price0_cumulative_last: Uint256::zero(),
+        price1_cumulative_last: Uint256::zero(),
         trading_starts: msg.trading_starts,
     };
 
@@ -287,7 +287,7 @@ pub fn provide_liquidity(
     env: Env,
     info: MessageInfo,
     assets: Vec<Asset>,
-    slippage_tolerance: Option<Decimal>,
+    slippage_tolerance: Option<Decimal256>,
     receiver: Option<String>,
 ) -> Result<Response, ContractError> {
     let mut assets = check_assets(deps.api, &assets)?;
@@ -350,7 +350,7 @@ pub fn provide_liquidity(
         // use half for swapping
         let input_asset = AssetValidated {
             info: offer_asset.info.clone(),
-            amount: offer_asset.amount / Uint128::from(2u128),
+            amount: offer_asset.amount / Uint256::from(2u128),
         };
 
         // Get config from the factory
@@ -410,7 +410,7 @@ pub fn provide_liquidity(
     let total_share = query_supply(&deps.querier, &config.pair_info.liquidity_token)?;
     let share = if total_share.is_zero() {
         // Initial share = collateral amount
-        let share: Uint128 = deposits[0]
+        let share: Uint256 = deposits[0]
             .amount
             .full_mul(deposits[1].amount)
             .isqrt()
@@ -462,7 +462,7 @@ pub fn provide_liquidity(
     let new_pool0 = pools[0].amount + deposits[0].amount;
     let new_pool1 = pools[1].amount + deposits[1].amount;
 
-    let price = Decimal::from_ratio(new_pool0, new_pool1);
+    let price = Decimal256::from_ratio(new_pool0, new_pool1);
     if total_share.is_zero() {
         // initialize oracle storage
         wyndex::oracle::initialize_oracle(deps.storage, &env, price)?;
@@ -498,7 +498,7 @@ pub fn withdraw_liquidity(
     env: Env,
     info: MessageInfo,
     sender: Addr,
-    amount: Uint128,
+    amount: Uint256,
 ) -> Result<Response, ContractError> {
     let mut config = CONFIG.load(deps.storage).unwrap();
 
@@ -514,11 +514,11 @@ pub fn withdraw_liquidity(
         .iter()
         .zip(refund_assets.iter())
         .map(|(p, r)| p.amount - r.amount);
-    let (new_pool0, new_pool1) = (new_pools.next().unwrap(), new_pools.next().unwrap());
+    let (new_pool0, new_pool1) = (new_pools.next().unwrap(), new_pools.next());
     wyndex::oracle::store_oracle_price(
         deps.storage,
         &env,
-        Decimal::from_ratio(new_pool0, new_pool1),
+        Decimal256::from_ratio(new_pool0, new_pool1.unwrap()),
     )?;
 
     // Accumulate prices for the pair assets
@@ -537,7 +537,9 @@ pub fn withdraw_liquidity(
         refund_assets[1].clone().into_msg(sender.clone())?,
         CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: config.pair_info.liquidity_token.to_string(),
-            msg: to_json_binary(&Cw20ExecuteMsg::Burn { amount })?,
+            msg: to_json_binary(&Cw20ExecuteMsg::Burn {
+                amount: amount.into(),
+            })?,
             funds: vec![],
         }),
     ];
@@ -574,11 +576,11 @@ pub fn swap(
     info: MessageInfo,
     sender: Addr,
     mut offer_asset: AssetValidated,
-    belief_price: Option<Decimal>,
-    max_spread: Option<Decimal>,
+    belief_price: Option<Decimal256>,
+    max_spread: Option<Decimal256>,
     to: Option<Addr>,
     referral_address: Option<Addr>,
-    referral_commission: Option<Decimal>,
+    referral_commission: Option<Decimal256>,
 ) -> Result<Response, ContractError> {
     offer_asset.assert_sent_native_token_balance(&info)?;
     let original_offer_asset = offer_asset.clone();
@@ -666,9 +668,9 @@ fn check_if_frozen(deps: &DepsMut) -> Result<(), ContractError> {
 struct SwapResult {
     return_asset: AssetValidated,
     ask_info: AssetInfoValidated,
-    spread_amount: Uint128,
-    commission_amount: Uint128,
-    protocol_fee_amount: Uint128,
+    spread_amount: Uint256,
+    commission_amount: Uint256,
+    protocol_fee_amount: Uint256,
     protocol_fee_msg: Option<CosmosMsg>,
 }
 /// Helper method that executes a swap of one asset for another without needing to receive or send out the coins.
@@ -684,8 +686,8 @@ fn do_swap(
     factory_config: &FactoryConfig,
     pools: &[AssetValidated],
     offer_asset: &AssetValidated,
-    belief_price: Option<Decimal>,
-    max_spread: Option<Decimal>,
+    belief_price: Option<Decimal256>,
+    max_spread: Option<Decimal256>,
 ) -> Result<SwapResult, ContractError> {
     if env.block.time.seconds() < config.trading_starts {
         return Err(ContractError::TradingNotStarted {});
@@ -730,7 +732,7 @@ fn do_swap(
 
     // Compute the protocol fee
     let mut fee_msg = None;
-    let mut protocol_fee_amount = Uint128::zero();
+    let mut protocol_fee_amount = Uint256::zero();
     if let Some(ref fee_address) = factory_config.fee_address {
         if let Some(f) = calculate_protocol_fee(
             &ask_pool.info,
@@ -760,7 +762,7 @@ fn do_swap(
     wyndex::oracle::store_oracle_price(
         deps.storage,
         env,
-        Decimal::from_ratio(new_pool0, new_pool1),
+        Decimal256::from_ratio(new_pool0, new_pool1),
     )?;
 
     // Accumulate prices for the assets in the pool
@@ -793,22 +795,22 @@ fn do_swap(
 pub fn accumulate_prices(
     env: &Env,
     config: &Config,
-    x: Uint128,
-    y: Uint128,
-) -> StdResult<Option<(Uint128, Uint128, u64)>> {
+    x: Uint256,
+    y: Uint256,
+) -> StdResult<Option<(Uint256, Uint256, u64)>> {
     let block_time = env.block.time.seconds();
     if block_time <= config.block_time_last {
         return Ok(None);
     }
 
     // We have to shift block_time when any price is zero in order to not fill an accumulator with a null price for that period
-    let time_elapsed = Uint128::from(block_time - config.block_time_last);
+    let time_elapsed: Uint256 = Uint256::from(block_time - config.block_time_last);
 
     let mut pcl0 = config.price0_cumulative_last;
     let mut pcl1 = config.price1_cumulative_last;
 
     if !x.is_zero() && !y.is_zero() {
-        let price_precision = Uint128::from(10u128.pow(TWAP_PRECISION.into()));
+        let price_precision = Uint256::from(10u128.pow(TWAP_PRECISION.into()));
         pcl0 = config.price0_cumulative_last.wrapping_add(
             time_elapsed
                 .checked_mul(price_precision)?
@@ -834,10 +836,10 @@ pub fn accumulate_prices(
 /// * **protocol_commission_rate** is the percentage of fees that go to the protocol.
 pub fn calculate_protocol_fee(
     pool_info: &AssetInfoValidated,
-    commission_amount: Uint128,
-    protocol_commission_rate: Decimal,
+    commission_amount: Uint256,
+    protocol_commission_rate: Decimal256,
 ) -> Option<AssetValidated> {
-    let protocol_fee: Uint128 = commission_amount.mul_floor(protocol_commission_rate);
+    let protocol_fee: Uint256 = commission_amount.mul_floor(protocol_commission_rate);
     if protocol_fee.is_zero() {
         return None;
     }
@@ -913,7 +915,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
             end_age,
         )?),
         QueryMsg::Config {} => to_json_binary(&query_config(deps)?),
-        _ => Err(StdError::generic_err("Query is not supported")),
+        _ => Err(StdError::msg("Query is not supported")),
     }
 }
 
@@ -935,7 +937,7 @@ pub fn query_pool(deps: Deps) -> StdResult<PoolResponse> {
 /// The result is returned in a vector that contains objects of type [`Asset`].
 ///
 /// * **amount** is the amount of LP tokens for which we calculate associated amounts of assets.
-pub fn query_share(deps: Deps, amount: Uint128) -> StdResult<Vec<AssetValidated>> {
+pub fn query_share(deps: Deps, amount: Uint256) -> StdResult<Vec<AssetValidated>> {
     let config = CONFIG.load(deps.storage)?;
     let (pools, total_share) = pool_info(deps.querier, &config)?;
     let refund_assets = get_share_in_assets(&pools, amount, total_share);
@@ -950,7 +952,7 @@ pub fn query_simulation(
     deps: Deps,
     offer_asset: Asset,
     referral: bool,
-    referral_commission: Option<Decimal>,
+    referral_commission: Option<Decimal256>,
 ) -> StdResult<SimulationResponse> {
     let mut offer_asset = offer_asset.validate(deps.api)?;
     let config = CONFIG.load(deps.storage)?;
@@ -959,7 +961,7 @@ pub fn query_simulation(
         let factory_config = query_factory_config(&deps.querier, config.factory_addr)?;
         take_referral(&factory_config, referral_commission, &mut offer_asset)?
     } else {
-        Uint128::zero()
+        Uint256::zero()
     };
 
     let pools = config
@@ -975,7 +977,7 @@ pub fn query_simulation(
         offer_pool = pools[1].clone();
         ask_pool = pools[0].clone();
     } else {
-        return Err(StdError::generic_err(
+        return Err(StdError::msg(
             "Given offer asset does not belong in the pair",
         ));
     }
@@ -1003,7 +1005,7 @@ pub fn query_reverse_simulation(
     deps: Deps,
     ask_asset: Asset,
     referral: bool,
-    referral_commission: Option<Decimal>,
+    referral_commission: Option<Decimal256>,
 ) -> StdResult<ReverseSimulationResponse> {
     let ask_asset = ask_asset.validate(deps.api)?;
     let config = CONFIG.load(deps.storage)?;
@@ -1021,9 +1023,7 @@ pub fn query_reverse_simulation(
         ask_pool = pools[1].clone();
         offer_pool = pools[0].clone();
     } else {
-        return Err(StdError::generic_err(
-            "Given ask asset doesn't belong to pairs",
-        ));
+        return Err(StdError::msg("Given ask asset doesn't belong to pairs"));
     }
 
     let (offer_amount, spread_amount, commission_amount) = compute_offer_amount(
@@ -1111,18 +1111,17 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
 ///
 /// * **commission_rate** total amount of fees charged for the swap.
 pub fn compute_swap(
-    offer_pool: Uint128,
-    ask_pool: Uint128,
-    offer_amount: Uint128,
-    commission_rate: Decimal,
-) -> StdResult<(Uint128, Uint128, Uint128)> {
+    offer_pool: Uint256,
+    ask_pool: Uint256,
+    offer_amount: Uint256,
+    commission_rate: Decimal256,
+) -> StdResult<(Uint256, Uint256, Uint256)> {
     // offer => ask
     check_swap_parameters(vec![offer_pool, ask_pool], offer_amount)?;
 
     let offer_pool: Uint256 = offer_pool.into();
     let ask_pool: Uint256 = ask_pool.into();
     let offer_amount: Uint256 = offer_amount.into();
-    let commission_rate = decimal2decimal256(commission_rate)?;
 
     // ask_amount = (ask_pool - cp / (offer_pool + offer_amount))
     let cp: Uint256 = offer_pool * ask_pool;
@@ -1154,20 +1153,20 @@ pub fn compute_swap(
 ///
 /// * **commission_rate** total amount of fees charged for the swap.
 pub fn compute_offer_amount(
-    offer_pool: Uint128,
-    ask_pool: Uint128,
-    ask_amount: Uint128,
-    commission_rate: Decimal,
-) -> StdResult<(Uint128, Uint128, Uint128)> {
+    offer_pool: Uint256,
+    ask_pool: Uint256,
+    ask_amount: Uint256,
+    commission_rate: Decimal256,
+) -> StdResult<(Uint256, Uint256, Uint256)> {
     // ask => offer
     check_swap_parameters(vec![offer_pool, ask_pool], ask_amount)?;
 
     // offer_amount = cp / (ask_pool - ask_amount / (1 - commission_rate)) - offer_pool
     let cp = Uint256::from(offer_pool) * Uint256::from(ask_pool);
-    let one_minus_commission = Decimal256::one() - decimal2decimal256(commission_rate)?;
+    let one_minus_commission = Decimal256::one() - commission_rate;
     let inv_one_minus_commission = Decimal256::one() / one_minus_commission;
 
-    let offer_amount: Uint128 = cp
+    let offer_amount: Uint256 = cp
         .multiply_ratio(
             Uint256::from(1u8),
             Uint256::from(ask_pool.checked_sub(
@@ -1178,10 +1177,10 @@ pub fn compute_offer_amount(
         .try_into()?;
 
     let before_commission_deduction = Uint256::from(ask_amount).mul_floor(inv_one_minus_commission);
-    let spread_amount = (offer_amount.mul_floor(Decimal::from_ratio(ask_pool, offer_pool)))
+    let spread_amount = (offer_amount.mul_floor(Decimal256::from_ratio(ask_pool, offer_pool)))
         .saturating_sub(before_commission_deduction.try_into()?);
     let commission_amount =
-        before_commission_deduction.mul_floor(decimal2decimal256(commission_rate)?);
+        before_commission_deduction.mul_floor(commission_rate);
     Ok((offer_amount, spread_amount, commission_amount.try_into()?))
 }
 
@@ -1193,19 +1192,19 @@ pub fn compute_offer_amount(
 ///
 /// * **pools** array with total amount of assets in the pool.
 fn assert_slippage_tolerance(
-    slippage_tolerance: Option<Decimal>,
-    deposits: &[Uint128; 2],
+    slippage_tolerance: Option<Decimal256>,
+    deposits: &[Uint256; 2],
     pools: &[AssetValidated],
 ) -> Result<(), ContractError> {
-    let default_slippage = Decimal::from_str(DEFAULT_SLIPPAGE)?;
-    let max_allowed_slippage = Decimal::from_str(MAX_ALLOWED_SLIPPAGE)?;
+    let default_slippage = Decimal256::from_str(DEFAULT_SLIPPAGE)?;
+    let max_allowed_slippage = Decimal256::from_str(MAX_ALLOWED_SLIPPAGE)?;
 
     let slippage_tolerance = slippage_tolerance.unwrap_or(default_slippage);
     if slippage_tolerance.gt(&max_allowed_slippage) {
         return Err(ContractError::AllowedSpreadAssertion {});
     }
 
-    let slippage_tolerance: Decimal256 = decimal2decimal256(slippage_tolerance)?;
+    let slippage_tolerance: Decimal256 = slippage_tolerance;
     let one_minus_slippage_tolerance = Decimal256::one() - slippage_tolerance;
     let deposits: [Uint256; 2] = [deposits[0].into(), deposits[1].into()];
     let pools: [Uint256; 2] = [pools[0].amount.into(), pools[1].amount.into()];
@@ -1226,7 +1225,7 @@ fn assert_slippage_tolerance(
 pub fn pool_info(
     querier: QuerierWrapper,
     config: &Config,
-) -> StdResult<(Vec<AssetValidated>, Uint128)> {
+) -> StdResult<(Vec<AssetValidated>, Uint256)> {
     let pools = config
         .pair_info
         .query_pools(&querier, &config.pair_info.contract_addr)?;

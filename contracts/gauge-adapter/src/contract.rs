@@ -1,8 +1,8 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    coins, to_json_binary, Addr, Binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response,
-    StdResult, Uint128, WasmMsg,
+    coins, to_json_binary, Addr, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo,
+    Response, StdResult, Uint256, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw20::Cw20ExecuteMsg;
@@ -62,7 +62,7 @@ mod execute {
     pub fn update_rewards(
         deps: DepsMut,
         sender: Addr,
-        new_amount: Uint128,
+        new_amount: Uint256,
     ) -> Result<Response, ContractError> {
         let mut config = CONFIG.load(deps.storage)?;
         if sender != config.owner {
@@ -172,14 +172,14 @@ fn create_distribute_msgs(
             contract_addr: asset.info.to_string(),
             msg: to_json_binary(&Cw20ExecuteMsg::Send {
                 contract: staking_contract,
-                amount: asset.amount,
+                amount: asset.amount.into(),
                 msg: to_json_binary(&StakeReceiveDelegationMsg::Fund { funding_info })?,
             })?,
             funds: vec![],
         }
         .into()]),
         AssetInfoValidated::Native(denom) => {
-            let funds = coins(asset.amount.u128(), denom);
+            let funds = vec![Coin::new(asset.amount, denom)];
             Ok(vec![WasmMsg::Execute {
                 contract_addr: staking_contract,
                 msg: to_json_binary(&StakeExecuteMsg::FundDistribution { funding_info })?,
@@ -227,8 +227,8 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
 #[cfg(test)]
 mod tests {
     use cosmwasm_std::{
-        testing::{mock_dependencies, mock_env, mock_info},
-        to_json_binary, Coin, CosmosMsg, Decimal, Uint128, WasmMsg,
+        testing::{message_info, mock_dependencies, mock_env, MockApi},
+        to_json_binary, Addr, Coin, CosmosMsg, Decimal, Uint128, Uint256, WasmMsg,
     };
     use wyndex::stake::FundingInfo;
 
@@ -242,13 +242,18 @@ mod tests {
 
     const EPOCH_LENGTH: u64 = 86_400;
 
+    fn default_addrs() -> Vec<Addr> {
+        vec![MockApi::default().addr_make("user"),MockApi::default().addr_make("factory"),MockApi::default().addr_make("owner")]
+    }
     #[test]
     fn proper_initialization() {
         let mut deps = mock_dependencies();
+        let user = default_addrs()[0].clone();
         let amount = 1000u64;
+        let addrs = default_addrs();
         let mut msg = InstantiateMsg {
-            factory: "factory".to_string(),
-            owner: "owner".to_string(),
+            factory: addrs[1].to_string(),
+            owner: addrs[2].to_string(),
             rewards_asset: wyndex::asset::Asset {
                 info: wyndex::asset::AssetInfo::Native("juno".to_string()),
                 amount: amount.into(),
@@ -259,7 +264,7 @@ mod tests {
         let err = instantiate(
             deps.as_mut(),
             mock_env(),
-            mock_info("user", &[]),
+            message_info(&user, &[]),
             msg.clone(),
         )
         .unwrap_err();
@@ -270,17 +275,18 @@ mod tests {
             epoch_length: EPOCH_LENGTH,
             ..msg
         };
+        let user = &default_addrs()[0.clone()];
 
-        instantiate(deps.as_mut(), mock_env(), mock_info("user", &[]), msg).unwrap();
+        instantiate(deps.as_mut(), mock_env(), message_info(&user, &[]), msg).unwrap();
 
         // check if the config is stored
         let config = CONFIG.load(deps.as_ref().storage).unwrap();
-        assert_eq!(config.factory.as_str(), "factory");
+        assert_eq!(config.factory, addrs[1]);
         assert_eq!(
             config.rewards_asset.info,
             wyndex::asset::AssetInfoValidated::Native("juno".to_string())
         );
-        assert_eq!(config.rewards_asset.amount.u128(), 1000);
+        assert_eq!(config.rewards_asset.amount, Uint256::new(1000));
         assert_eq!(config.distribution_duration, EPOCH_LENGTH);
     }
 
@@ -288,14 +294,15 @@ mod tests {
     fn basic_sample() {
         let mut deps = mock_dependencies();
         let amount = 10_000u64;
-
+        let addrs = default_addrs();
+        let user = &addrs[0];
         instantiate(
             deps.as_mut(),
             mock_env(),
-            mock_info("user", &[]),
+            message_info(&user, &[]),
             InstantiateMsg {
-                factory: "factory".to_string(),
-                owner: "owner".to_string(),
+                factory: addrs[1].to_string(),
+                owner: addrs[2].to_string(),
                 rewards_asset: wyndex::asset::Asset {
                     info: wyndex::asset::AssetInfo::Native("juno".to_string()),
                     amount: amount.into(),
@@ -320,7 +327,7 @@ mod tests {
                     funding_info: FundingInfo {
                         start_time: mock_env().block.time.seconds(),
                         distribution_duration: EPOCH_LENGTH,
-                        amount: Uint128::from(4160u128)
+                        amount: Uint256::from(4160u128)
                     }
                 })
                 .unwrap(),
@@ -338,7 +345,7 @@ mod tests {
                     funding_info: FundingInfo {
                         start_time: mock_env().block.time.seconds(),
                         distribution_duration: EPOCH_LENGTH,
-                        amount: Uint128::from(3330u128)
+                        amount: Uint256::from(3330u128)
                     }
                 })
                 .unwrap(),
@@ -356,7 +363,7 @@ mod tests {
                     funding_info: FundingInfo {
                         start_time: mock_env().block.time.seconds(),
                         distribution_duration: EPOCH_LENGTH,
-                        amount: Uint128::from(2500u128)
+                        amount: Uint256::from(2500u128)
                     }
                 })
                 .unwrap(),
@@ -371,24 +378,28 @@ mod tests {
     #[test]
     fn update_rewards() {
         let amount = 2000u128;
+                let user = &default_addrs()[0].clone();
+                let factory = &default_addrs()[1].clone();
+                let owner = &default_addrs()[2].clone();
+
 
         let mut deps = mock_dependencies();
         let msg = InstantiateMsg {
-            factory: "factory".to_string(),
-            owner: "owner".to_string(),
+            factory: factory.to_string(),
+            owner: owner.to_string(),
             rewards_asset: Asset {
                 info: AssetInfo::Native("juno".to_string()),
                 amount: 1000u128.into(),
             },
             epoch_length: EPOCH_LENGTH,
         };
-        instantiate(deps.as_mut(), mock_env(), mock_info("user", &[]), msg).unwrap();
+        instantiate(deps.as_mut(), mock_env(), message_info(&user, &[]), msg).unwrap();
 
         // If not factory, update fails
         let err = execute(
             deps.as_mut(),
             mock_env(),
-            mock_info("user", &[]),
+            message_info(&user, &[]),
             ExecuteMsg::UpdateRewards {
                 amount: amount.into(),
             },
@@ -399,7 +410,7 @@ mod tests {
         execute(
             deps.as_mut(),
             mock_env(),
-            mock_info("factory", &[]),
+            message_info(&factory, &[]),
             ExecuteMsg::UpdateRewards {
                 amount: amount.into(),
             },
@@ -410,7 +421,7 @@ mod tests {
         execute(
             deps.as_mut(),
             mock_env(),
-            mock_info("owner", &[]),
+            message_info(&owner, &[]),
             ExecuteMsg::UpdateRewards {
                 amount: amount.into(),
             },
@@ -423,6 +434,9 @@ mod tests {
             config.rewards_asset.info,
             wyndex::asset::AssetInfoValidated::Native("juno".to_string())
         );
-        assert_eq!(config.rewards_asset.amount.u128(), 2000);
+        assert_eq!(
+            Uint128::try_from(config.rewards_asset.amount).unwrap().u128(),
+            2000,
+        );
     }
 }

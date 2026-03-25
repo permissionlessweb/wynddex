@@ -1,8 +1,8 @@
 use std::collections::HashSet;
 
 use cosmwasm_std::{
-    entry_point, from_json, to_json_binary, Addr, Api, Binary, Coin, CosmosMsg, Decimal, Deps,
-    DepsMut, Env, MessageInfo, Response, StdError, StdResult, Uint128, WasmMsg,
+    entry_point, from_json, to_json_binary, Addr, Api, Binary, Coin, CosmosMsg, Decimal256, Deps,
+    DepsMut, Env, MessageInfo, Response, StdError, StdResult, Uint256, WasmMsg,
 };
 use cw2::ensure_from_older_version;
 use cw2::set_contract_version;
@@ -131,6 +131,8 @@ pub fn receive_cw20(
 }
 
 mod execute {
+    use cosmwasm_std::Decimal256;
+
     use super::*;
 
     #[allow(clippy::too_many_arguments)]
@@ -140,10 +142,10 @@ mod execute {
         info: MessageInfo,
         operation: SwapOperation,
         receiver: Option<String>,
-        max_spread: Option<Decimal>,
+        max_spread: Option<Decimal256>,
         single: bool,
         referral_address: Option<String>,
-        referral_commission: Option<Decimal>,
+        referral_commission: Option<Decimal256>,
     ) -> Result<Response, ContractError> {
         if env.contract.address != info.sender {
             return Err(ContractError::Unauthorized {});
@@ -195,14 +197,14 @@ mod execute {
         pair_contract: String,
         offer_asset: Asset,
         ask_asset_info: AssetInfo,
-        max_spread: Option<Decimal>,
+        max_spread: Option<Decimal256>,
         receiver: Option<String>,
         single: bool,
         referral_address: Option<String>,
-        referral_commission: Option<Decimal>,
+        referral_commission: Option<Decimal256>,
     ) -> StdResult<CosmosMsg> {
         // Disabling spread assertion if this swap is part of a multi hop route
-        let belief_price = if single { None } else { Some(Decimal::MAX) };
+        let belief_price = if single { None } else { Some(Decimal256::MAX) };
 
         match &offer_asset.info {
             AssetInfo::Native(denom) => {
@@ -212,7 +214,7 @@ mod execute {
                     contract_addr: pair_contract,
                     funds: vec![Coin {
                         denom: denom.to_string(),
-                        amount,
+                        amount: amount.into(),
                     }],
                     msg: to_json_binary(&PairExecuteMsg::Swap {
                         offer_asset: Asset {
@@ -233,7 +235,7 @@ mod execute {
                 funds: vec![],
                 msg: to_json_binary(&Cw20ExecuteMsg::Send {
                     contract: pair_contract,
-                    amount: offer_asset.amount,
+                    amount: offer_asset.amount.into(),
                     msg: to_json_binary(&wyndex::pair::Cw20HookMsg::Swap {
                         ask_asset_info: Some(ask_asset_info),
                         belief_price,
@@ -253,11 +255,11 @@ mod execute {
         env: Env,
         sender: Addr,
         operations: Vec<SwapOperation>,
-        minimum_receive: Option<Uint128>,
+        minimum_receive: Option<Uint256>,
         receiver: Option<String>,
-        max_spread: Option<Decimal>,
+        max_spread: Option<Decimal256>,
         referral_address: Option<String>,
-        referral_commission: Option<Decimal>,
+        referral_commission: Option<Decimal256>,
     ) -> Result<Response, ContractError> {
         if operations.is_empty() {
             return Err(ContractError::MustProvideOperations {});
@@ -331,8 +333,8 @@ mod execute {
     pub fn assert_minimum_receive(
         deps: Deps,
         asset_info: AssetInfo,
-        prev_balance: Uint128,
-        minimum_receive: Uint128,
+        prev_balance: Uint256,
+        minimum_receive: Uint256,
         receiver: Addr,
     ) -> Result<Response, ContractError> {
         let asset_info = asset_info.validate(deps.api)?;
@@ -405,9 +407,9 @@ mod query {
     /// These are all the swap operations for which we perform a simulation.
     pub fn simulate_swap_operations(
         deps: Deps,
-        offer_amount: Uint128,
+        offer_amount: Uint256,
         referral: bool,
-        referral_commission: Option<Decimal>,
+        referral_commission: Option<Decimal256>,
         operations: Vec<SwapOperation>,
     ) -> Result<SimulateSwapOperationsResponse, ContractError> {
         let config = CONFIG.load(deps.storage)?;
@@ -429,7 +431,7 @@ mod query {
         let mut commission_amounts = Vec::with_capacity(operations_len);
         let mut referral_amount = None;
         // the ratio of swap result to ideal swap result (= 1 - spread percentage)
-        let mut percent_of_ideal = Decimal::one();
+        let mut percent_of_ideal = Decimal256::one();
         for (idx, operation) in operations.into_iter().enumerate() {
             match operation {
                 SwapOperation::WyndexSwap {
@@ -462,7 +464,7 @@ mod query {
                     // Otherwise it would be counted as spread.
                     // This then needs to be multiplied by the percentage of the previous swap operation to
                     // get the percentage with regards to the whole swap.
-                    percent_of_ideal *= Decimal::from_ratio(
+                    percent_of_ideal *= Decimal256::from_ratio(
                         res.return_amount + res.commission_amount,
                         res.return_amount + res.commission_amount + res.spread_amount,
                     );
@@ -481,7 +483,7 @@ mod query {
 
         Ok(SimulateSwapOperationsResponse {
             amount: offer_amount,
-            spread: Decimal::one() - percent_of_ideal,
+            spread: Decimal256::one() - percent_of_ideal,
             spread_amounts,
             commission_amounts,
             referral_amount: referral_amount
@@ -498,9 +500,9 @@ mod query {
     /// These are all the swap operations for which we perform a simulation.
     pub fn simulate_reverse_swap_operations(
         deps: Deps,
-        ask_amount: Uint128,
+        ask_amount: Uint256,
         referral: bool,
-        referral_commission: Option<Decimal>,
+        referral_commission: Option<Decimal256>,
         operations: Vec<SwapOperation>,
     ) -> Result<SimulateSwapOperationsResponse, ContractError> {
         let config = CONFIG.load(deps.storage)?;
@@ -522,7 +524,7 @@ mod query {
         let mut commission_amounts = Vec::with_capacity(operations_len);
         let mut referral_amount = None;
         // the ratio of swap result to ideal swap result (= 1 - spread percentage)
-        let mut percent_of_ideal = Decimal::one();
+        let mut percent_of_ideal = Decimal256::one();
         for (idx, operation) in operations.into_iter().enumerate().rev() {
             match operation {
                 SwapOperation::WyndexSwap {
@@ -554,7 +556,7 @@ mod query {
                     // Otherwise it would be counted as spread.
                     // This then needs to be multiplied by the percentage of the previous swap operation to
                     // get the percentage with regards to the whole swap.
-                    percent_of_ideal *= Decimal::from_ratio(
+                    percent_of_ideal *= Decimal256::from_ratio(
                         ask_amount + res.commission_amount,
                         ask_amount + res.commission_amount + res.spread_amount,
                     );
@@ -575,7 +577,7 @@ mod query {
 
         Ok(SimulateSwapOperationsResponse {
             amount: ask_amount,
-            spread: Decimal::one() - percent_of_ideal,
+            spread: Decimal256::one() - percent_of_ideal,
             spread_amounts,
             commission_amounts,
             referral_amount: referral_amount
@@ -603,7 +605,7 @@ fn assert_operations(api: &dyn Api, operations: &[SwapOperation]) -> Result<(), 
     }
 
     if ask_asset_map.len() != 1 {
-        return Err(StdError::generic_err("invalid operations; multiple output token").into());
+        return Err(StdError::msg("invalid operations; multiple output token").into());
     }
 
     Ok(())
@@ -617,30 +619,36 @@ pub fn migrate(deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, C
 
 #[cfg(test)]
 mod testing {
+    use cosmwasm_std::testing::MockApi;
+    use cw_multi_test::App;
+    use wyndex_test_helpers::TestAccounts;
+
     use super::*;
 
     #[test]
     fn test_invalid_operations() {
         use cosmwasm_std::testing::mock_dependencies;
         let deps = mock_dependencies();
+        let a: TestAccounts = TestAccounts::new(&App::default().api());
         // Empty error
         assert!(assert_operations(deps.as_ref().api, &[]).is_err());
-
-        // uluna output
-        assert!(assert_operations(
+        let res = assert_operations(
             deps.as_ref().api,
             &[
                 SwapOperation::WyndexSwap {
                     offer_asset_info: AssetInfo::Native("ukrw".to_string()),
-                    ask_asset_info: AssetInfo::Token("asset0001".to_string()),
+                    ask_asset_info: AssetInfo::Token(a.whale.to_string()),
                 },
                 SwapOperation::WyndexSwap {
-                    offer_asset_info: AssetInfo::Token("asset0001".to_string()),
+                    offer_asset_info: AssetInfo::Token(a.whale.to_string()),
                     ask_asset_info: AssetInfo::Native("uluna".to_string()),
                 },
             ],
-        )
-        .is_ok());
+        );
+        println!("{:#?}", res);
+
+        // uluna output
+        assert!(res.is_ok());
 
         // asset0002 output
         assert!(assert_operations(
@@ -648,15 +656,15 @@ mod testing {
             &[
                 SwapOperation::WyndexSwap {
                     offer_asset_info: AssetInfo::Native("ukrw".to_string()),
-                    ask_asset_info: AssetInfo::Token("asset0001".to_string()),
+                    ask_asset_info: AssetInfo::Token(a.whale.to_string()),
                 },
                 SwapOperation::WyndexSwap {
-                    offer_asset_info: AssetInfo::Token("asset0001".to_string()),
+                    offer_asset_info: AssetInfo::Token(a.whale.to_string()),
                     ask_asset_info: AssetInfo::Native("uluna".to_string()),
                 },
                 SwapOperation::WyndexSwap {
                     offer_asset_info: AssetInfo::Native("uluna".to_string()),
-                    ask_asset_info: AssetInfo::Token("asset0002".to_string()),
+                    ask_asset_info: AssetInfo::Token(a.owner.to_string()),
                 },
             ],
         )

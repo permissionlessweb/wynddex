@@ -76,7 +76,7 @@ pub fn handle_reply(
 ) -> Result<Response, ContractError> {
     let msg_id = msg.id;
     // parse the reply
-    let result = msg.result.into_result().map_err(StdError::generic_err)?;
+    let result = msg.result.into_result().map_err(StdError::msg)?;
     let res = cw_utils::parse_instantiate_response_data(
         result
             .msg_responses
@@ -87,7 +87,7 @@ pub fn handle_reply(
             .unwrap()
             .as_slice(),
     )
-    .map_err(|_| StdError::parse_err("MsgInstantiateContractResponse", "failed to parse data"))?;
+    .map_err(|_| StdError::msg("failed to parse MsgInstantiateContractResponse data"))?;
     match msg_id {
         INSTANTIATE_TOKEN_REPLY_ID => instantiate_lp_token_reply(deps, res, factory, pair_info),
         INSTANTIATE_STAKE_REPLY_ID => instantiate_staking_reply(deps, res, pair_info),

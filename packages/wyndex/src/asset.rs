@@ -10,13 +10,13 @@ use crate::querier::{
 };
 use cosmwasm_std::{
     to_json_binary, Addr, Api, BankMsg, Coin, ConversionOverflowError, CosmosMsg, Decimal256,
-    Fraction, MessageInfo, QuerierWrapper, StdError, StdResult, Uint128, Uint256, WasmMsg,
+    Fraction, MessageInfo, QuerierWrapper, StdError, StdResult, Uint256, WasmMsg,
 };
 use cw20::{Cw20ExecuteMsg, Cw20QueryMsg, MinterResponse, TokenInfoResponse};
 use itertools::Itertools;
 
 /// Minimum initial LP share
-pub const MINIMUM_LIQUIDITY_AMOUNT: Uint128 = Uint128::new(1_000);
+pub const MINIMUM_LIQUIDITY_AMOUNT: Uint256 = Uint256::new(1_000);
 
 /// This enum describes a Terra asset (native or CW20).
 #[cw_serde]
@@ -24,7 +24,7 @@ pub struct Asset {
     /// Information about an asset stored in a [`AssetInfo`] struct
     pub info: AssetInfo,
     /// A token amount
-    pub amount: Uint128,
+    pub amount: Uint256,
 }
 
 impl Asset {
@@ -48,7 +48,7 @@ pub struct AssetValidated {
     /// Information about an asset stored in a [`AssetInfoValidated`] struct
     pub info: AssetInfoValidated,
     /// A token amount
-    pub amount: Uint128,
+    pub amount: Uint256,
 }
 
 impl From<AssetValidated> for Asset {
@@ -98,7 +98,7 @@ impl AssetValidated {
                 contract_addr: contract_addr.to_string(),
                 msg: to_json_binary(&Cw20ExecuteMsg::Transfer {
                     recipient,
-                    amount: self.amount,
+                    amount: self.amount.into(),
                 })?,
                 funds: vec![],
             })),
@@ -106,7 +106,7 @@ impl AssetValidated {
                 to_address: recipient,
                 amount: vec![Coin {
                     denom: denom.to_string(),
-                    amount: self.amount,
+                    amount: self.amount.into(),
                 }],
             })),
         }
@@ -132,7 +132,7 @@ impl AssetValidated {
                     msg: to_json_binary(&Cw20ExecuteMsg::TransferFrom {
                         owner: info.sender.to_string(),
                         recipient: env.contract.address.to_string(),
-                        amount: self.amount,
+                        amount: self.amount.into(),
                     })?,
                     funds: vec![],
                 }));
@@ -146,17 +146,17 @@ impl AssetValidated {
         if let AssetInfoValidated::Native(denom) = &self.info {
             match message_info.funds.iter().find(|x| x.denom == *denom) {
                 Some(coin) => {
-                    if self.amount == coin.amount {
+                    if Uint256::from(self.amount) == coin.amount {
                         Ok(())
                     } else {
-                        Err(StdError::generic_err("Native token balance mismatch between the argument and the transferred"))
+                        Err(StdError::msg("Native token balance mismatch between the argument and the transferred"))
                     }
                 }
                 None => {
                     if self.amount.is_zero() {
                         Ok(())
                     } else {
-                        Err(StdError::generic_err("Native token balance mismatch between the argument and the transferred"))
+                        Err(StdError::msg("Native token balance mismatch between the argument and the transferred"))
                     }
                 }
             }
@@ -196,7 +196,7 @@ impl AssetInfo {
             }
             AssetInfo::Native(denom) => {
                 if !denom.starts_with("ibc/") && denom != &denom.to_lowercase() {
-                    return Err(StdError::generic_err(format!(
+                    return Err(StdError::msg(format!(
                         "Non-IBC token denom {} should be lowercase",
                         denom
                     )));
@@ -209,7 +209,7 @@ impl AssetInfo {
         &self,
         querier: &QuerierWrapper,
         pool_addr: impl Into<String>,
-    ) -> StdResult<Uint128> {
+    ) -> StdResult<Uint256> {
         match self {
             AssetInfo::Token(contract_addr) => {
                 query_token_balance(querier, contract_addr, pool_addr)
@@ -294,7 +294,7 @@ impl AssetInfoValidated {
         &self,
         querier: &QuerierWrapper,
         account_addr: impl Into<String>,
-    ) -> StdResult<Uint128> {
+    ) -> StdResult<Uint256> {
         match self {
             AssetInfoValidated::Token(contract_addr) => {
                 query_token_balance(querier, contract_addr, account_addr)
@@ -354,7 +354,7 @@ impl KeyDeserialize for &AssetInfoValidated {
         match asset_type {
             0 => Ok(AssetInfoValidated::Native(denom)),
             1 => Ok(AssetInfoValidated::Token(Addr::unchecked(denom))),
-            _ => Err(StdError::generic_err(
+            _ => Err(StdError::msg(
                 "Invalid AssetInfoValidated key, invalid type",
             )),
         }
@@ -419,7 +419,7 @@ pub fn format_lp_token_name(
 /// * **denom** native asset denomination.
 ///
 /// * **amount** amount of native assets.
-pub fn native_asset(denom: impl Into<String>, amount: impl Into<Uint128>) -> AssetValidated {
+pub fn native_asset(denom: impl Into<String>, amount: impl Into<Uint256>) -> AssetValidated {
     AssetValidated {
         info: AssetInfoValidated::Native(denom.into()),
         amount: amount.into(),
@@ -431,7 +431,7 @@ pub fn native_asset(denom: impl Into<String>, amount: impl Into<Uint128>) -> Ass
 /// * **contract_addr** iaddress of the token contract.
 ///
 /// * **amount** amount of tokens.
-pub fn token_asset(contract_addr: Addr, amount: impl Into<Uint128>) -> AssetValidated {
+pub fn token_asset(contract_addr: Addr, amount: impl Into<Uint256>) -> AssetValidated {
     AssetValidated {
         info: AssetInfoValidated::Token(contract_addr),
         amount: amount.into(),
@@ -444,7 +444,7 @@ pub fn native_asset_info(denom: &str) -> AssetInfo {
 }
 
 /// Returns an [`AssetInfo`] object representing the address of a token contract.
-pub fn token_asset_info(contract_addr: &str) -> AssetInfo {
+pub fn token_asset_info(contract_addr: &Addr) -> AssetInfo {
     AssetInfo::Token(contract_addr.to_string())
 }
 
@@ -465,13 +465,13 @@ pub fn pair_info_by_pool(querier: &QuerierWrapper, pool: impl Into<String>) -> S
 /// * **pools** amount of tokens in pools.
 ///
 /// * **swap_amount** amount to swap.
-pub fn check_swap_parameters(pools: Vec<Uint128>, swap_amount: Uint128) -> StdResult<()> {
+pub fn check_swap_parameters(pools: Vec<Uint256>, swap_amount: Uint256) -> StdResult<()> {
     if pools.iter().any(|pool| pool.is_zero()) {
-        return Err(StdError::generic_err("One of the pools is empty"));
+        return Err(StdError::msg("One of the pools is empty"));
     }
 
     if swap_amount.is_zero() {
-        return Err(StdError::generic_err("Swap amount must not be zero"));
+        return Err(StdError::msg("Swap amount must not be zero"));
     }
 
     Ok(())
@@ -480,12 +480,12 @@ pub fn check_swap_parameters(pools: Vec<Uint128>, swap_amount: Uint128) -> StdRe
 /// Trait extension for AssetInfo to produce [`Asset`] objects from [`AssetInfo`].
 pub trait AssetInfoExt {
     type Asset;
-    fn with_balance(&self, balance: impl Into<Uint128>) -> Self::Asset;
+    fn with_balance(&self, balance: impl Into<Uint256>) -> Self::Asset;
 }
 
 impl AssetInfoExt for AssetInfoValidated {
     type Asset = AssetValidated;
-    fn with_balance(&self, balance: impl Into<Uint128>) -> Self::Asset {
+    fn with_balance(&self, balance: impl Into<Uint256>) -> Self::Asset {
         AssetValidated {
             info: self.clone(),
             amount: balance.into(),
@@ -494,7 +494,7 @@ impl AssetInfoExt for AssetInfoValidated {
 }
 impl AssetInfoExt for AssetInfo {
     type Asset = Asset;
-    fn with_balance(&self, balance: impl Into<Uint128>) -> Self::Asset {
+    fn with_balance(&self, balance: impl Into<Uint256>) -> Self::Asset {
         Asset {
             info: self.clone(),
             amount: balance.into(),
@@ -506,7 +506,7 @@ impl AssetInfoExt for AssetInfo {
 pub trait Decimal256Ext {
     fn to_uint256(&self) -> Uint256;
 
-    fn to_uint128_with_precision(&self, precision: impl Into<u32>) -> StdResult<Uint128>;
+    fn to_Uint256_with_precision(&self, precision: impl Into<u32>) -> StdResult<Uint256>;
 
     fn to_uint256_with_precision(&self, precision: impl Into<u32>) -> StdResult<Uint256>;
 
@@ -529,16 +529,12 @@ impl Decimal256Ext for Decimal256 {
         self.numerator() / self.denominator()
     }
 
-    fn to_uint128_with_precision(&self, precision: impl Into<u32>) -> StdResult<Uint128> {
+    fn to_Uint256_with_precision(&self, precision: impl Into<u32>) -> StdResult<Uint256> {
         let value = self.atomics();
         let precision = precision.into();
 
-        value
-            .checked_div(10u128.pow(self.decimal_places() - precision).into())?
-            .try_into()
-            .map_err(|o: ConversionOverflowError| {
-                StdError::generic_err(format!("Error converting {}", o))
-            })
+        Ok(value
+            .checked_div(10u128.pow(self.decimal_places() - precision).into())?)
     }
 
     fn to_uint256_with_precision(&self, precision: impl Into<u32>) -> StdResult<Uint256> {
@@ -547,7 +543,7 @@ impl Decimal256Ext for Decimal256 {
 
         value
             .checked_div(10u128.pow(self.decimal_places() - precision).into())
-            .map_err(|_| StdError::generic_err("DivideByZeroError"))
+            .map_err(|_| StdError::msg("DivideByZeroError"))
     }
 
     fn from_integer(i: impl Into<Uint256>) -> Self {
@@ -562,7 +558,7 @@ impl Decimal256Ext for Decimal256 {
         Ok(Decimal256::new(
             self.atomics()
                 .checked_multiply_ratio(numerator.atomics(), denominator.atomics())
-                .map_err(|_| StdError::generic_err("CheckedMultiplyRatioError"))?,
+                .map_err(|_| StdError::msg("CheckedMultiplyRatioError"))?,
         ))
     }
 
@@ -571,6 +567,6 @@ impl Decimal256Ext for Decimal256 {
         precision: impl Into<u32>,
     ) -> StdResult<Decimal256> {
         Decimal256::from_atomics(value, precision.into())
-            .map_err(|_| StdError::generic_err("Decimal256 range exceeded"))
+            .map_err(|_| StdError::msg("Decimal256 range exceeded"))
     }
 }

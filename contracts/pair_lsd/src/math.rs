@@ -1,5 +1,5 @@
 use crate::state::Config;
-use cosmwasm_std::{Decimal256, Fraction, StdError, StdResult, Uint128, Uint256, Uint64};
+use cosmwasm_std::{Decimal256, Fraction, StdError, StdResult, Uint256, Uint64};
 use itertools::Itertools;
 use wyndex::asset::{AssetInfoValidated, Decimal256Ext, DecimalAsset};
 
@@ -78,14 +78,14 @@ pub(crate) fn calc_y(
     amp: Uint64,
     target_precision: u8,
     config: &Config,
-) -> StdResult<Uint128> {
+) -> StdResult<Uint256> {
     if to.equal(&from_asset.info) {
-        return Err(StdError::generic_err(
+        return Err(StdError::msg(
             "The offer asset and ask asset cannot be the same.",
         ));
     }
     if from_asset.amount.eq(&new_amount) {
-        return Err(StdError::generic_err("The swap amount cannot be zero."));
+        return Err(StdError::msg("The swap amount cannot be zero."));
     }
 
     let pools = pools
@@ -125,7 +125,7 @@ pub(crate) fn calc_y(
                 d,
                 pool_amount.to_uint256_with_precision(target_precision)? * Uint256::from(n_coins),
             )
-            .map_err(|_| StdError::generic_err("CheckedMultiplyRatioError"))?;
+            .map_err(|_| StdError::msg("CheckedMultiplyRatioError"))?;
     }
     let c = c * d / (ann * Uint256::from(n_coins));
     let sum = sum.to_uint256_with_precision(target_precision)?;
@@ -144,11 +144,11 @@ pub(crate) fn calc_y(
     }
 
     // Should definitely converge in 32 iterations.
-    Err(StdError::generic_err("y is not converging"))
+    Err(StdError::msg("y is not converging"))
 }
 
 /// Applies the target rate to the amount if the asset is the LSD token.
-pub(crate) fn apply_rate(asset: &AssetInfoValidated, amount: Uint128, config: &Config) -> Uint128 {
+pub(crate) fn apply_rate(asset: &AssetInfoValidated, amount: Uint256, config: &Config) -> Uint256 {
     if config.is_lsd(asset) {
         amount.mul_floor(config.target_rate())
     } else {
@@ -169,7 +169,7 @@ pub(crate) fn apply_rate_decimal(
     }
 }
 
-fn inverse_rate(to: &AssetInfoValidated, y: Uint128, config: &Config) -> Uint128 {
+fn inverse_rate(to: &AssetInfoValidated, y: Uint256, config: &Config) -> Uint256 {
     if config.is_lsd(to) {
         // y / target_rate
         let t = config.target_rate();
@@ -183,7 +183,7 @@ fn inverse_rate(to: &AssetInfoValidated, y: Uint128, config: &Config) -> Uint128
 #[cfg(feature = "requires-python-sim")]
 mod tests {
     use super::*;
-    use cosmwasm_std::{Uint128, Uint256};
+    use cosmwasm_std::Uint256;
     use sim::StableSwapModel;
     use wyndex::asset::native_asset;
     use wyndex::querier::NATIVE_TOKEN_PRECISION;
@@ -191,9 +191,9 @@ mod tests {
     #[test]
     fn test_compute_d() {
         let amp = Uint64::from(100u64);
-        let pool1 = Uint128::from(100_000_000000u128);
-        let pool2 = Uint128::from(100_000_000000u128);
-        let pool3 = Uint128::from(100_000_000000u128);
+        let pool1 = Uint256::from(100_000_000000u128);
+        let pool2 = Uint256::from(100_000_000000u128);
+        let pool3 = Uint256::from(100_000_000000u128);
         let model = StableSwapModel::new(
             amp.u64().into(),
             vec![pool1.u128(), pool2.u128(), pool3.u128()],
@@ -218,9 +218,9 @@ mod tests {
     #[test]
     fn test_compute_y() {
         let amp = Uint64::from(100u64);
-        let pool1 = Uint128::from(100_000_000000u128);
-        let pool2 = Uint128::from(100_000_000000u128);
-        let pool3 = Uint128::from(100_000_000000u128);
+        let pool1 = Uint256::from(100_000_000000u128);
+        let pool2 = Uint256::from(100_000_000000u128);
+        let pool3 = Uint256::from(100_000_000000u128);
         let model = StableSwapModel::new(
             amp.u64().into(),
             vec![pool1.u128(), pool2.u128(), pool3.u128()],
@@ -233,7 +233,7 @@ mod tests {
             native_asset("test3".to_string(), pool3),
         ];
 
-        let offer_amount = Uint128::from(100_000000u128);
+        let offer_amount = Uint256::from(100_000000u128);
         let sim_y = model.sim_y(0, 1, pool1.u128() + offer_amount.u128());
         let y = calc_y(
             &pools[0].to_decimal_asset(NATIVE_TOKEN_PRECISION).unwrap(),

@@ -1,9 +1,10 @@
 use super::suite::SuiteBuilder;
-
 use cosmwasm_std::testing::MockApi;
-use cosmwasm_std::{assert_approx_eq, coin, Decimal, Fraction, Uint128};
+use cosmwasm_std::{assert_approx_eq, coin, Addr, Decimal256, Fraction, Uint128, Uint256};
+use cw_multi_test::App;
 use wyndex::pair::{add_referral, take_referral};
 use wyndex::querier::query_factory_config;
+use wyndex_test_helpers::TestAccounts;
 
 use crate::error::ContractError;
 use crate::msg::{SwapOperation, MAX_SWAP_OPERATIONS};
@@ -13,29 +14,30 @@ use wyndex::factory::PairType;
 #[test]
 fn must_provide_operations() {
     let ujuno = "ujuno";
-    let user = "user";
+    let accounts = TestAccounts::new(App::default().api());
+    let user = accounts.user;
 
     let mut suite = SuiteBuilder::new()
-        .with_funds(user, &[coin(100_000, ujuno)])
+        .with_funds(&user, &[coin(100_000, ujuno)])
         .build();
 
     let err = suite
-        .swap_operations(user, coin(100_000u128, ujuno), vec![])
+        .swap_operations(&user, coin(100_000u128, ujuno), vec![])
         .unwrap_err();
-    assert_eq!(
-        ContractError::MustProvideOperations {},
-        err.downcast().unwrap()
-    );
+
+    assert!(err
+        .to_string()
+        .contains(&ContractError::MustProvideOperations {}.to_string()))
 }
 
 #[test]
 fn single_swap() {
     let ujuno = "ujuno";
-    let user = "user";
-
+    let accounts = TestAccounts::new(App::default().api());
+    let user = accounts.user;
     let mut suite = SuiteBuilder::new().build();
 
-    let owner = suite.owner.clone();
+    let owner = suite.a.owner.clone();
 
     let token = suite.instantiate_token(&owner, "wynd");
 
@@ -51,12 +53,12 @@ fn single_swap() {
 
     // Mint some cw20 for user to exchange
     suite
-        .mint_cw20(&owner, &token, 100_000_000u128, user)
+        .mint_cw20(&owner, &token, 100_000_000u128, &user)
         .unwrap();
 
     suite
         .swap_operations_cw20(
-            user,
+            &user,
             &token,
             100_000u128,
             vec![SwapOperation::WyndexSwap {
@@ -66,20 +68,21 @@ fn single_swap() {
         )
         .unwrap();
 
-    assert_eq!(suite.query_balance(user, ujuno).unwrap(), 99_900u128);
+    assert_eq!(suite.query_balance(&user, ujuno).unwrap(), 99_900u128);
 }
 
 #[test]
 fn multiple_swaps() {
     let ujuno = "ujuno";
     let uluna = "uluna";
-    let user = "user";
+    let accounts = TestAccounts::new(App::default().api());
+    let user = accounts.user;
 
     let mut suite = SuiteBuilder::new()
-        .with_funds(user, &[coin(100_000, ujuno)])
+        .with_funds(&user, &[coin(100_000, ujuno)])
         .build();
 
-    let owner = suite.owner.clone();
+    let owner = suite.a.owner.clone();
 
     let token_a = suite.instantiate_token(&owner, "wynd");
     let token_b = suite.instantiate_token(&owner, "ueco");
@@ -112,7 +115,7 @@ fn multiple_swaps() {
 
     suite
         .swap_operations(
-            user,
+            &user,
             coin(100_000u128, "ujuno"),
             vec![
                 SwapOperation::WyndexSwap {
@@ -132,7 +135,7 @@ fn multiple_swaps() {
         .unwrap();
 
     assert_eq!(
-        suite.query_cw20_balance(user, &token_b).unwrap(),
+        suite.query_cw20_balance(&user, &token_b).unwrap(),
         99_970u128
     );
 }
@@ -141,7 +144,8 @@ fn multiple_swaps() {
 fn multi_hop_does_not_enforce_spread_assetion() {
     let mut suite = SuiteBuilder::new().build();
 
-    let owner = suite.owner.clone();
+    let owner = suite.a.owner.clone();
+    let user = suite.a.user.clone();
 
     let token_a = suite.instantiate_token(&owner, "TOKA");
     let token_b = suite.instantiate_token(&owner, "TOKB");
@@ -165,15 +169,14 @@ fn multi_hop_does_not_enforce_spread_assetion() {
         )
         .unwrap();
 
-    let user = "user";
     suite
-        .mint_cw20(&owner, &token_a, 100_000_000_000u128, user)
+        .mint_cw20(&owner, &token_a, 100_000_000_000u128, &user)
         .unwrap();
 
     // Triggering swap with a huge spread fees
     suite
         .swap_operations_cw20(
-            user,
+            &user,
             &token_a,
             50_000_000_000u128,
             vec![
@@ -192,7 +195,7 @@ fn multi_hop_does_not_enforce_spread_assetion() {
     // However, single hop will still enforce spread assertion
     let err = suite
         .swap_operations_cw20(
-            user,
+            &user,
             &token_a,
             50_000_000_000u128,
             vec![SwapOperation::WyndexSwap {
@@ -201,10 +204,9 @@ fn multi_hop_does_not_enforce_spread_assetion() {
             }],
         )
         .unwrap_err();
-    assert_eq!(
-        wyndex::pair::ContractError::MaxSpreadAssertion {},
-        err.downcast().unwrap()
-    )
+    assert!(err
+        .to_string()
+        .contains(&wyndex::pair::ContractError::MaxSpreadAssertion {}.to_string()))
 }
 
 #[test]
@@ -214,7 +216,7 @@ fn query_buy_with_routes() {
 
     let mut suite = SuiteBuilder::new().build();
 
-    let owner = suite.owner.clone();
+    let owner = suite.a.owner.clone();
 
     let token = suite.instantiate_token(&owner, "TOKA");
 
@@ -253,10 +255,16 @@ fn query_buy_with_routes() {
         .unwrap();
     // ideal amount for first swap is `1_000_000`, but because of spread it's `999_000`
     // starting with that, the ideal amount for the second swap is `999_000`, but because of spread it's `998_002`
-    assert_eq!(response.amount.u128(), 998_002u128);
+    assert_eq!(
+        Uint128::try_from(response.amount).unwrap().u128(),
+        998_002u128
+    );
     assert_approx_eq!(
-        response.spread.numerator(),
-        (Decimal::one() - Decimal::from_ratio(998_002u128, 1_000_000u128)).numerator(),
+        Uint128::try_from(response.spread.numerator()).unwrap(),
+        Uint128::try_from(
+            (Decimal256::one() - Decimal256::from_ratio(998_002u128, 1_000_000u128)).numerator()
+        )
+        .unwrap(),
         "0.000000000000001"
     );
 
@@ -280,10 +288,17 @@ fn query_buy_with_routes() {
     // but we only get 998_002 because of spread
     // ideal amount for first swap is 1_000_000, but we only get 999_000 because of spread
     // input amount should be (approximately) 1_000_000
-    assert_approx_eq!(response.amount.u128(), 1_000_000u128, "0.00001");
     assert_approx_eq!(
-        response.spread.numerator(),
-        (Decimal::one() - Decimal::from_ratio(998_002u128, 1_000_000u128)).numerator(),
+        Uint128::try_from(response.amount).unwrap().u128(),
+        1_000_000u128,
+        "0.00001"
+    );
+    assert_approx_eq!(
+        Uint128::try_from(response.spread.numerator()).unwrap(),
+        Uint128::try_from(
+            (Decimal256::one() - Decimal256::from_ratio(998_002u128, 1_000_000u128)).numerator()
+        )
+        .unwrap(),
         "0.01"
     );
 }
@@ -296,7 +311,7 @@ fn simulation_with_fee() {
     // fee is 1% for both tokens
     let mut suite = SuiteBuilder::new().with_fees(100, 50).build();
 
-    let owner = suite.owner.clone();
+    let owner = suite.a.owner.clone();
 
     let token = suite.instantiate_token(&owner, "TOKA");
 
@@ -342,12 +357,15 @@ fn simulation_with_fee() {
     // the fee is `999_000 * 1% = 9_990`, so it returns `989_010`
     // the ideal amount for the second swap is `989_010`, but because of spread (978) it's `988_032` and
     // the fee is `988_032 * 1% = 9_880`, so it returns `978_152`
-    assert_eq!(response.amount.u128(), 978_152u128);
+    assert_eq!(
+        Uint128::try_from(response.amount).unwrap().u128(),
+        978_152u128
+    );
     assert_eq!(
         response.spread,
-        (Decimal::one()
-            - (Decimal::from_ratio(999_000u128, 1_000_000u128)
-                * Decimal::from_ratio(988_032u128, 989_010u128)))
+        (Decimal256::one()
+            - (Decimal256::from_ratio(999_000u128, 1_000_000u128)
+                * Decimal256::from_ratio(988_032u128, 989_010u128)))
     );
     // validate absolute amounts
     let api = MockApi::default();
@@ -389,7 +407,7 @@ fn simulation_with_fee() {
                     ask_asset_info: uluna_info.clone(),
                 },
             ],
-            Decimal::percent(1),
+            Decimal256::percent(1),
         )
         .unwrap();
 
@@ -397,12 +415,15 @@ fn simulation_with_fee() {
     // the fee is `989_020 * 1% = 9_890`, so it returns `979_130`
     // the ideal amount for the second swap is `979_130`, but because of spread (958) it's `978_172` and
     // the fee is `978_172 * 1% = 9_781`, so it returns `968_391`
-    assert_eq!(response.amount.u128(), 968_391u128);
+    assert_eq!(
+        Uint128::try_from(response.amount).unwrap().u128(),
+        968_391u128
+    );
     assert_eq!(
         response.spread,
-        (Decimal::one()
-            - (Decimal::from_ratio(989_020u128, 990_000u128)
-                * Decimal::from_ratio(978_172u128, 979_130u128)))
+        (Decimal256::one()
+            - (Decimal256::from_ratio(989_020u128, 990_000u128)
+                * Decimal256::from_ratio(978_172u128, 979_130u128)))
     );
     // validate absolute amounts
     assert_eq!(
@@ -436,17 +457,24 @@ fn simulation_with_fee() {
                     ask_asset_info: uluna_info,
                 },
             ],
-            Decimal::percent(1),
+            Decimal256::percent(1),
         )
         .unwrap();
     // should result in approximately 1_000_000 with the same spread
-    assert_approx_eq!(response.amount.u128(), 1_000_000u128, "0.00001");
     assert_approx_eq!(
-        response.spread.numerator(),
-        (Decimal::one()
-            - (Decimal::from_ratio(989_020u128, 990_000u128)
-                * Decimal::from_ratio(978_172u128, 979_130u128)))
-        .numerator(),
+        Uint128::try_from(response.amount).unwrap().u128(),
+        1_000_000u128,
+        "0.00001"
+    );
+    assert_approx_eq!(
+        Uint128::try_from(response.spread.numerator()).unwrap(),
+        Uint128::try_from(
+            (Decimal256::one()
+                - (Decimal256::from_ratio(989_020u128, 990_000u128)
+                    * Decimal256::from_ratio(978_172u128, 979_130u128)))
+            .numerator()
+        )
+        .unwrap(),
         "0.01"
     );
 }
@@ -454,62 +482,72 @@ fn simulation_with_fee() {
 #[test]
 fn assert_minimum_receive_native_tokens() {
     let ujuno = "ujuno";
-
+    let accounts = TestAccounts::new(App::default().api());
+    let user = accounts.user;
     let mut suite = SuiteBuilder::new()
-        .with_funds("user", &[coin(1_000_000, ujuno)])
+        .with_funds(&user, &[coin(1_000_000, ujuno)])
         .build();
 
     // that works
     suite
-        .assert_minimum_receive("user", AssetInfo::Native(ujuno.to_owned()), 1_000_000u128)
+        .assert_minimum_receive(&user, AssetInfo::Native(ujuno.to_owned()), 1_000_000u128)
         .unwrap();
 
     let err = suite
-        .assert_minimum_receive("user", AssetInfo::Native(ujuno.to_owned()), 1_000_001u128)
+        .assert_minimum_receive(&user, AssetInfo::Native(ujuno.to_owned()), 1_000_001u128)
         .unwrap_err();
-    assert_eq!(
-        ContractError::AssertionMinimumReceive {
-            receive: Uint128::new(1_000_001),
-            amount: Uint128::new(1_000_000)
-        },
-        err.downcast().unwrap()
-    );
+
+    assert!(err.to_string().contains(
+        &ContractError::AssertionMinimumReceive {
+            receive: Uint256::from(1_000_001u128),
+            amount: Uint256::from(1_000_000u128)
+        }
+        .to_string()
+    ))
 }
 
 #[test]
 fn assert_minimum_receive_cw20_tokens() {
     let mut suite = SuiteBuilder::new().build();
-
-    let token = suite.instantiate_token("owner", "TOKA");
+    let accounts = TestAccounts::new(App::default().api());
+    let user = accounts.user;
+    let token = suite.instantiate_token(&Addr::unchecked(suite.a.owner.clone()), "TOKA");
     suite
-        .mint_cw20("owner", &token, 1_000_000u128, "user")
+        .mint_cw20(
+            &Addr::unchecked(suite.a.owner.clone()),
+            &token,
+            1_000_000u128,
+            &user,
+        )
         .unwrap();
 
     // that works
     suite
-        .assert_minimum_receive("user", AssetInfo::Token(token.to_string()), 1_000_000u128)
+        .assert_minimum_receive(&user, AssetInfo::Token(token.to_string()), 1_000_000u128)
         .unwrap();
 
     let err = suite
-        .assert_minimum_receive("user", AssetInfo::Token(token.to_string()), 1_000_001u128)
+        .assert_minimum_receive(&user, AssetInfo::Token(token.to_string()), 1_000_001u128)
         .unwrap_err();
-    assert_eq!(
-        ContractError::AssertionMinimumReceive {
-            receive: Uint128::new(1_000_001),
-            amount: Uint128::new(1_000_000)
-        },
-        err.downcast().unwrap()
-    );
+
+    assert!(err.to_string().contains(
+        &ContractError::AssertionMinimumReceive {
+            receive: Uint256::from(1_000_001u128),
+            amount: Uint256::from(1_000_000u128)
+        }
+        .to_string()
+    ))
 }
 
 #[test]
 fn maximum_receive_swap_operations() {
     let ujuno = "ujuno";
     let uluna = "uluna";
-    let user = "user";
+    let accounts = TestAccounts::new(App::default().api());
+    let user = accounts.user;
 
     let mut suite = SuiteBuilder::new()
-        .with_funds(user, &[coin(100_000, ujuno)])
+        .with_funds(&user, &[coin(100_000, ujuno)])
         .build();
 
     // create LP for just instantiated tokens
@@ -524,7 +562,7 @@ fn maximum_receive_swap_operations() {
 
     let err = suite
         .swap_operations(
-            user,
+            &user,
             coin(100_000u128, "ujuno"),
             vec![
                 SwapOperation::WyndexSwap {
@@ -535,7 +573,10 @@ fn maximum_receive_swap_operations() {
             ],
         )
         .unwrap_err();
-    assert_eq!(ContractError::SwapLimitExceeded {}, err.downcast().unwrap());
+
+    assert!(err
+        .to_string()
+        .contains(&ContractError::SwapLimitExceeded {}.to_string()))
 }
 
 /// Tests the helper functions for calculating referral commission.
@@ -559,7 +600,7 @@ fn take_add_referral() {
             &querier,
             &suite.factory,
             true,
-            Some(Decimal::percent(1)),
+            Some(Decimal256::percent(1)),
             offer_asset,
         )
         .unwrap();
@@ -568,27 +609,31 @@ fn take_add_referral() {
         let factory_config = query_factory_config(&querier, &suite.factory).unwrap();
         take_referral(
             &factory_config,
-            Some(Decimal::percent(1)),
+            Some(Decimal256::percent(1)),
             &mut with_referral,
         )
         .unwrap();
 
         // should be the same as before
-        assert_eq!(with_referral.amount.u128(), offer_amount);
+        assert_eq!(
+            Uint128::try_from(with_referral.amount).unwrap().u128(),
+            offer_amount
+        );
     }
 }
 
 #[test]
 fn referral_single() {
     let ujuno = "ujuno";
-    let user = "user";
-    let referral = "referral";
+    let accounts = TestAccounts::new(App::default().api());
+    let user = accounts.user;
+    let referral = accounts.beneficiary;
 
     let mut suite = SuiteBuilder::new()
-        .with_max_referral_commission(Decimal::percent(1))
+        .with_max_referral_commission(Decimal256::percent(1))
         .build();
 
-    let owner = suite.owner.clone();
+    let owner = suite.a.owner.clone();
 
     let token = suite.instantiate_token(&owner, "wynd");
 
@@ -603,13 +648,13 @@ fn referral_single() {
         .unwrap();
 
     // Mint some cw20 tokens
-    suite.mint_cw20(&owner, &token, 101_010u128, user).unwrap();
+    suite.mint_cw20(&owner, &token, 101_010u128, &user).unwrap();
 
     // single router swap with referral
     // amount is chosen such that it will be 100_000 after referral commission is deducted
     suite
         .swap_operations_cw20_ref(
-            user,
+            &user,
             &token,
             101_010u128,
             vec![SwapOperation::WyndexSwap {
@@ -617,14 +662,14 @@ fn referral_single() {
                 ask_asset_info: AssetInfo::Native(ujuno.to_string()),
             }],
             referral.to_string(),
-            Decimal::percent(1),
+            Decimal256::percent(1),
         )
         .unwrap();
-    assert_eq!(suite.query_balance(user, ujuno).unwrap(), 99_900u128);
+    assert_eq!(suite.query_balance(&user, ujuno).unwrap(), 99_900u128);
 
     // make sure referral got the commission
     assert_eq!(
-        suite.query_cw20_balance(referral, &token).unwrap(),
+        suite.query_cw20_balance(&referral, &token).unwrap(),
         1010u128
     );
 }
@@ -633,14 +678,15 @@ fn referral_single() {
 fn referral_multiple() {
     let ujuno = "ujuno";
     let uluna = "uluna";
-    let user = "user";
-    let referral = "referral";
+    let accounts = TestAccounts::new(App::default().api());
+    let user = accounts.user;
+    let referral = accounts.fee_receiver;
 
     let mut suite = SuiteBuilder::new()
-        .with_funds(user, &[coin(101_010, ujuno)])
+        .with_funds(&user, &[coin(101_010, ujuno)])
         .build();
 
-    let owner = suite.owner.clone();
+    let owner = suite.a.owner.clone();
 
     let token_a = suite.instantiate_token(&owner, "wynd");
     let token_b = suite.instantiate_token(&owner, "ueco");
@@ -687,47 +733,55 @@ fn referral_multiple() {
     ];
 
     // query the result first, so we can compare it with the result after referral
-    let query_result = suite
-        .query_simulate_swap_operations_ref(101_010u128, operations.clone(), Decimal::percent(1))
-        .unwrap()
-        .amount
-        .u128();
+    let query_result = Uint128::try_from(
+        suite
+            .query_simulate_swap_operations_ref(
+                101_010u128,
+                operations.clone(),
+                Decimal256::percent(1),
+            )
+            .unwrap()
+            .amount,
+    )
+    .unwrap()
+    .u128();
 
     suite
         .swap_operations_ref(
-            user,
+            &user,
             coin(101_010u128, "ujuno"),
             operations,
             referral.to_string(),
-            Decimal::percent(1),
+            Decimal256::percent(1),
         )
         .unwrap();
 
     assert_eq!(
-        suite.query_cw20_balance(user, &token_b).unwrap(),
+        suite.query_cw20_balance(&user, &token_b).unwrap(),
         query_result
     );
 
     assert_eq!(
-        suite.query_cw20_balance(user, &token_b).unwrap(),
+        suite.query_cw20_balance(&user, &token_b).unwrap(),
         99_970u128
     );
 
     // make sure referral got the commission
-    assert_eq!(suite.query_balance(referral, ujuno).unwrap(), 1010u128);
+    assert_eq!(suite.query_balance(&referral, ujuno).unwrap(), 1010u128);
 }
 
 #[test]
 fn invalid_referral_commission() {
     let ujuno = "ujuno";
-    let user = "user";
-    let referral = "referral";
+    let accounts = TestAccounts::new(App::default().api());
+    let user = accounts.user;
+    let referral = accounts.beneficiary;
 
     let mut suite = SuiteBuilder::new()
-        .with_max_referral_commission(Decimal::percent(1))
+        .with_max_referral_commission(Decimal256::percent(1))
         .build();
 
-    let owner = suite.owner.clone();
+    let owner = suite.a.owner.clone();
 
     let token = suite.instantiate_token(&owner, "wynd");
 
@@ -743,13 +797,13 @@ fn invalid_referral_commission() {
 
     // Mint some cw20 tokens to swap
     suite
-        .mint_cw20(&owner, &token, 100_000_000u128, user)
+        .mint_cw20(&owner, &token, 100_000_000u128, &user)
         .unwrap();
 
     // single router swap with referral, but commission too high
     let err = suite
         .swap_operations_cw20_ref(
-            user,
+            &user,
             &token,
             100_000,
             vec![SwapOperation::WyndexSwap {
@@ -757,28 +811,26 @@ fn invalid_referral_commission() {
                 ask_asset_info: AssetInfo::Native(ujuno.to_string()),
             }],
             referral.to_string(),
-            Decimal::percent(2),
+            Decimal256::percent(2),
         )
         .unwrap_err();
 
-    assert_eq!(
-        "Referral commission is higher than the allowed maximum",
-        err.root_cause().to_string()
-    );
+    assert!(err
+        .to_string()
+        .contains(&"Referral commission is higher than the allowed maximum"))
 }
 
 #[test]
 fn referral_commission_zero() {
     let ujuno = "ujuno";
-    let user = "user";
-    let referral = "referral";
+    let accounts = TestAccounts::new(App::default().api());
+    let user = accounts.user;
+    let referral = accounts.beneficiary;
 
     let mut suite = SuiteBuilder::new()
-        .with_max_referral_commission(Decimal::percent(1))
+        .with_max_referral_commission(Decimal256::percent(1))
         .build();
-
-    let owner = suite.owner.clone();
-
+    let owner = suite.a.owner.clone();
     let token = suite.instantiate_token(&owner, "wynd");
 
     // create LP for just instantiated tokens
@@ -792,12 +844,12 @@ fn referral_commission_zero() {
         .unwrap();
 
     // Mint some cw20 tokens to swap
-    suite.mint_cw20(&owner, &token, 1000u128, user).unwrap();
+    suite.mint_cw20(&owner, &token, 1000u128, &user).unwrap();
 
     // single router swap with referral, but zero commission, should not fail
     suite
         .swap_operations_cw20_ref(
-            user,
+            &user,
             &token,
             1000,
             vec![SwapOperation::WyndexSwap {
@@ -805,10 +857,10 @@ fn referral_commission_zero() {
                 ask_asset_info: AssetInfo::Native(ujuno.to_string()),
             }],
             referral.to_string(),
-            Decimal::from_ratio(1u128, 10_000u128),
+            Decimal256::from_ratio(1u128, 10_000u128),
         )
         .unwrap();
 
     // make sure referral commission is zero
-    assert_eq!(suite.query_balance(referral, ujuno).unwrap(), 0u128);
+    assert_eq!(suite.query_balance(&referral, ujuno).unwrap(), 0u128);
 }

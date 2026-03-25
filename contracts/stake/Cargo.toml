@@ -16,31 +16,32 @@ crate-type = ["cdylib", "rlib"]
 library = []
 
 [dependencies]
-wyndex = { workspace = true }
+# standard libs
+cosmwasm-schema = { workspace = true }
+# core cosmwasm
+cosmwasm-std = { workspace = true }
+cw-controllers = { workspace = true }
+cw-storage-plus = { workspace = true }
 # cw-plus
 cw-utils = { workspace = true }
 cw2 = { workspace = true }
 cw20 = { workspace = true }
-cw-controllers = { workspace = true }
-cw-storage-plus = { workspace = true }
-# core cosmwasm
-cosmwasm-std = { workspace = true }
-# standard libs
-cosmwasm-schema = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
+wyndex = { workspace = true }
+wyndex-test-helpers = { workspace = true }
 # wynd-curve-utils = { workspace = true }
 
 [dev-dependencies]
+# standard libs
+anyhow = { workspace = true }
+# core cosmwasm
+cosmwasm-schema = { workspace = true }
 # cw-plus
 cw-multi-test = { workspace = true }
 cw20-base = { workspace = true }
-# core cosmwasm
-cosmwasm-schema = { workspace = true }
-# standard libs
-anyhow = { workspace = true }
-test-case = { workspace = true }
 lp-converter = { workspace = true, features = ["library"] }
+test-case = { workspace = true }
+wyndex-2_0_0 = { package = "wyndex", git = "https://github.com/wynddao/wynddex", tag = "v2.0.2" }
 # migration test
 wyndex-stake-2_0_0 = { package = "wyndex-stake", git = "https://github.com/wynddao/wynddex", tag = "v2.0.2" }
-wyndex-2_0_0 = { package = "wyndex", git = "https://github.com/wynddao/wynddex", tag = "v2.0.2" }

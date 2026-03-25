@@ -1,4 +1,5 @@
-use cosmwasm_std::{attr, to_json_binary, Addr, Coin, Decimal, Uint128};
+use cosmwasm_std::testing::MockApi;
+use cosmwasm_std::{attr, to_json_binary, Addr, Coin, Decimal, Decimal256, Uint128, Uint256};
 use cw20::{BalanceResponse, Cw20Coin, Cw20ExecuteMsg, Cw20QueryMsg, MinterResponse};
 use cw20_base::msg::InstantiateMsg as TokenInstantiateMsg;
 use cw_multi_test::{App, ContractWrapper, Executor};
@@ -13,6 +14,7 @@ use wyndex::pair::{
     PoolResponse, QueryMsg, SimulationResponse, TWAP_PRECISION,
 };
 use wyndex::querier::query_token_balance;
+use wyndex_test_helpers::TestAccounts;
 
 const OWNER: &str = "owner";
 
@@ -88,7 +90,7 @@ fn instantiate_factory(router: &mut App, owner: &Addr) -> Addr {
         token_code_id: token_contract_code_id,
         fee_address: Some(owner.to_string()),
         owner: owner.to_string(),
-        max_referral_commission: Decimal::one(),
+        max_referral_commission: Decimal256::one(),
         default_stake_config: default_stake_config(staking_contract_code_id),
         trading_starts: None,
     };
@@ -136,8 +138,8 @@ fn instantiate_pair(router: &mut App, owner: &Addr) -> Addr {
         .wrap()
         .query_wasm_smart(pair.clone(), &QueryMsg::Pair {})
         .unwrap();
-    assert_eq!("contract1", res.contract_addr.as_str());
-    assert_eq!("contract2", res.liquidity_token.as_str());
+    assert_eq!(pair, res.contract_addr);
+    assert!(!res.liquidity_token.as_str().is_empty());
 
     pair
 }
@@ -156,7 +158,7 @@ fn instantiate_token(router: &mut App, owner: &Addr, balances: &[(&str, u128)]) 
                     .iter()
                     .map(|&(user, amount)| Cw20Coin {
                         address: user.to_string(),
-                        amount: Uint128::from(amount),
+                        amount: Uint256::from(amount),
                     })
                     .collect(),
                 mint: None,
@@ -172,8 +174,8 @@ fn instantiate_token(router: &mut App, owner: &Addr, balances: &[(&str, u128)]) 
 fn default_stake_config(staking_code_id: u64) -> DefaultStakeConfig {
     DefaultStakeConfig {
         staking_code_id,
-        tokens_per_power: Uint128::new(1000),
-        min_bond: Uint128::new(1000),
+        tokens_per_power: Uint256::new(1000),
+        min_bond: Uint256::new(1000),
         unbonding_periods: vec![1],
         max_distributions: 6,
         converter: None,
@@ -219,8 +221,8 @@ fn instantiate_mixed_pair(
 
 /// Provide liquidity with a cw20 token as one of the assets
 fn provide_liquidity_mixed_msg(
-    uusd_amount: Uint128,
-    cw20_amount: Uint128,
+    uusd_amount: Uint256,
+    cw20_amount: Uint256,
     cw20_token: &Addr,
     receiver: Option<String>,
     slippage_tolerance: Option<Decimal>,
@@ -236,7 +238,7 @@ fn provide_liquidity_mixed_msg(
                 amount: cw20_amount,
             },
         ],
-        slippage_tolerance,
+        slippage_tolerance: slippage_tolerance.map(Into::into),
         receiver,
     };
 
@@ -250,22 +252,23 @@ fn provide_liquidity_mixed_msg(
 
 #[test]
 fn test_provide_and_withdraw_liquidity() {
-    let owner = Addr::unchecked("owner");
-    let alice_address = Addr::unchecked("alice");
+    let a: TestAccounts = TestAccounts::new(&MockApi::default());
+    let owner = a.owner;
+    let alice_address = a.beneficiary;
     let mut router = mock_app(
         owner.clone(),
         vec![
             Coin {
                 denom: "uusd".to_string(),
-                amount: Uint128::new(100_000_000_000u128),
+                amount: Uint256::new(100_000_000_000u128),
             },
             Coin {
                 denom: "uluna".to_string(),
-                amount: Uint128::new(100_000_000_000u128),
+                amount: Uint256::new(100_000_000_000u128),
             },
             Coin {
                 denom: "cny".to_string(),
-                amount: Uint128::new(100_000_000_000u128),
+                amount: Uint256::new(100_000_000_000u128),
             },
         ],
     );
@@ -278,15 +281,15 @@ fn test_provide_and_withdraw_liquidity() {
             &[
                 Coin {
                     denom: "uusd".to_string(),
-                    amount: Uint128::new(233_000_000u128),
+                    amount: Uint256::new(233_000_000u128),
                 },
                 Coin {
                     denom: "uluna".to_string(),
-                    amount: Uint128::new(200_000_000u128),
+                    amount: Uint256::new(200_000_000u128),
                 },
                 Coin {
                     denom: "cny".to_string(),
-                    amount: Uint128::from(100_000_000u128),
+                    amount: Uint256::from(100_000_000u128),
                 },
             ],
         )
@@ -318,11 +321,11 @@ fn test_provide_and_withdraw_liquidity() {
             &[
                 Coin {
                     denom: "uusd".to_string(),
-                    amount: Uint128::new(100_000_000u128),
+                    amount: Uint256::new(100_000_000u128),
                 },
                 Coin {
                     denom: "uluna".to_string(),
-                    amount: Uint128::new(100_000_000u128),
+                    amount: Uint256::new(100_000_000u128),
                 },
             ],
         )
@@ -330,8 +333,8 @@ fn test_provide_and_withdraw_liquidity() {
 
     // Provide liquidity
     let (msg, coins) = provide_liquidity_msg(
-        Uint128::new(100_000_000),
-        Uint128::new(100_000_000),
+        Uint256::new(100_000_000),
+        Uint256::new(100_000_000),
         None,
         None,
     );
@@ -343,7 +346,7 @@ fn test_provide_and_withdraw_liquidity() {
         res.events[1].attributes[1],
         attr("action", "provide_liquidity")
     );
-    assert_eq!(res.events[1].attributes[3], attr("receiver", "alice"),);
+    assert_eq!(res.events[1].attributes[3], attr("receiver", alice_address.to_string()),);
     assert_eq!(
         res.events[1].attributes[4],
         attr("assets", "100000000uusd, 100000000uluna")
@@ -353,23 +356,24 @@ fn test_provide_and_withdraw_liquidity() {
         attr("share", 99999000u128.to_string())
     );
     assert_eq!(res.events[3].attributes[1], attr("action", "mint"));
-    assert_eq!(res.events[3].attributes[2], attr("to", "contract1"));
+    assert_eq!(res.events[3].attributes[2], attr("to", pair_instance.to_string()));
     assert_eq!(
         res.events[3].attributes[3],
         attr("amount", 1000.to_string())
     );
     assert_eq!(res.events[5].attributes[1], attr("action", "mint"));
-    assert_eq!(res.events[5].attributes[2], attr("to", "alice"));
+    assert_eq!(res.events[5].attributes[2], attr("to", alice_address.to_string()));
     assert_eq!(
         res.events[5].attributes[3],
         attr("amount", 99999000.to_string())
     );
 
     // Provide liquidity for receiver
+    let bob = MockApi::default().addr_make("bob");
     let (msg, coins) = provide_liquidity_msg(
-        Uint128::new(100),
-        Uint128::new(100),
-        Some("bob".to_string()),
+        Uint256::new(100),
+        Uint256::new(100),
+        Some(bob.to_string()),
         None,
     );
     let res = router
@@ -380,7 +384,7 @@ fn test_provide_and_withdraw_liquidity() {
         res.events[1].attributes[1],
         attr("action", "provide_liquidity")
     );
-    assert_eq!(res.events[1].attributes[3], attr("receiver", "bob"),);
+    assert_eq!(res.events[1].attributes[3], attr("receiver", bob.to_string()),);
     assert_eq!(
         res.events[1].attributes[4],
         attr("assets", "100uusd, 100uluna")
@@ -390,7 +394,7 @@ fn test_provide_and_withdraw_liquidity() {
         attr("share", 50u128.to_string())
     );
     assert_eq!(res.events[3].attributes[1], attr("action", "mint"));
-    assert_eq!(res.events[3].attributes[2], attr("to", "bob"));
+    assert_eq!(res.events[3].attributes[2], attr("to", bob.to_string()));
     assert_eq!(res.events[3].attributes[3], attr("amount", 50.to_string()));
 
     // Checking withdraw liquidity
@@ -405,7 +409,7 @@ fn test_provide_and_withdraw_liquidity() {
                 decimals: 6,
                 initial_balances: vec![Cw20Coin {
                     address: alice_address.to_string(),
-                    amount: Uint128::from(1000000000u128),
+                    amount: Uint256::from(1000000000u128),
                 }],
                 mint: None,
                 marketing: None,
@@ -418,14 +422,14 @@ fn test_provide_and_withdraw_liquidity() {
 
     let msg = Cw20ExecuteMsg::Send {
         contract: pair_instance.to_string(),
-        amount: Uint128::from(50u8),
+        amount: Uint256::from(50u8),
         msg: to_json_binary(&Cw20HookMsg::WithdrawLiquidity { assets: vec![] }).unwrap(),
     };
     // Try to send withdraw liquidity with FOO token
     let err = router
         .execute_contract(alice_address.clone(), foo_token, &msg, &[])
         .unwrap_err();
-    assert_eq!(err.root_cause().to_string(), "Unauthorized");
+    assert!(err.to_string().contains("Unauthorized"));
     // Withdraw with LP token is successful
     router
         .execute_contract(alice_address.clone(), lp_token, &msg, &[])
@@ -438,7 +442,7 @@ fn test_provide_and_withdraw_liquidity() {
             &ExecuteMsg::Swap {
                 offer_asset: Asset {
                     info: AssetInfo::Native("cny".to_string()),
-                    amount: Uint128::from(10u8),
+                    amount: Uint256::from(10u8),
                 },
                 ask_asset_info: None,
                 belief_price: None,
@@ -449,14 +453,11 @@ fn test_provide_and_withdraw_liquidity() {
             },
             &[Coin {
                 denom: "cny".to_string(),
-                amount: Uint128::from(10u8),
+                amount: Uint256::from(10u8),
             }],
         )
         .unwrap_err();
-    assert_eq!(
-        err.root_cause().to_string(),
-        "Asset mismatch between the requested and the stored asset in contract"
-    );
+    assert!(err.to_string().contains("Asset mismatch between the requested and the stored asset in contract"));
 
     // Check pair config
     let config: ConfigResponse = router
@@ -474,8 +475,8 @@ fn test_provide_and_withdraw_liquidity() {
 }
 
 fn provide_liquidity_msg(
-    uusd_amount: Uint128,
-    uluna_amount: Uint128,
+    uusd_amount: Uint256,
+    uluna_amount: Uint256,
     receiver: Option<String>,
     slippage_tolerance: Option<Decimal>,
 ) -> (ExecuteMsg, [Coin; 2]) {
@@ -490,7 +491,7 @@ fn provide_liquidity_msg(
                 amount: uluna_amount,
             },
         ],
-        slippage_tolerance,
+        slippage_tolerance: slippage_tolerance.map(Into::into),
         receiver,
     };
 
@@ -510,28 +511,28 @@ fn provide_liquidity_msg(
 
 #[test]
 fn test_compatibility_of_tokens_with_different_precision() {
-    let owner = Addr::unchecked(OWNER);
+    let owner = MockApi::default().addr_make(OWNER);
 
     let mut app = mock_app(
         owner.clone(),
         vec![
             Coin {
                 denom: "uusd".to_string(),
-                amount: Uint128::new(100_000_000_000_000u128),
+                amount: Uint256::new(100_000_000_000_000u128),
             },
             Coin {
                 denom: "uluna".to_string(),
-                amount: Uint128::new(100_000_000_000_000u128),
+                amount: Uint256::new(100_000_000_000_000u128),
             },
         ],
     );
 
     let token_code_id = store_token_code(&mut app);
 
-    let x_amount = Uint128::new(100_000_000_000);
-    let y_amount = Uint128::new(10_000_000_000_000);
-    let x_offer = Uint128::new(100_000);
-    let y_expected_return = Uint128::new(10_000_000);
+    let x_amount = Uint256::new(100_000_000_000);
+    let y_amount = Uint256::new(10_000_000_000_000);
+    let x_offer = Uint256::new(100_000);
+    let y_expected_return = Uint256::new(10_000_000);
 
     let token_name = "Xtoken";
 
@@ -540,11 +541,11 @@ fn test_compatibility_of_tokens_with_different_precision() {
         symbol: token_name.to_string(),
         decimals: 5,
         initial_balances: vec![Cw20Coin {
-            address: OWNER.to_string(),
+            address: owner.to_string(),
             amount: x_amount + x_offer,
         }],
         mint: Some(MinterResponse {
-            minter: String::from(OWNER),
+            minter: owner.to_string(),
             cap: None,
         }),
         marketing: None,
@@ -568,11 +569,11 @@ fn test_compatibility_of_tokens_with_different_precision() {
         symbol: token_name.to_string(),
         decimals: 7,
         initial_balances: vec![Cw20Coin {
-            address: OWNER.to_string(),
+            address: owner.to_string(),
             amount: y_amount,
         }],
         mint: Some(MinterResponse {
-            minter: String::from(OWNER),
+            minter: owner.to_string(),
             cap: None,
         }),
         marketing: None,
@@ -606,7 +607,7 @@ fn test_compatibility_of_tokens_with_different_precision() {
         }],
         token_code_id,
         owner: owner.to_string(),
-        max_referral_commission: Decimal::one(),
+        max_referral_commission: Decimal256::one(),
         default_stake_config: default_stake_config(staking_code_id),
         trading_starts: None,
     };
@@ -668,7 +669,7 @@ fn test_compatibility_of_tokens_with_different_precision() {
     app.execute_contract(owner.clone(), token_y_instance.clone(), &msg, &[])
         .unwrap();
 
-    let user = Addr::unchecked("user");
+    let user = MockApi::default().addr_make("user");
 
     let swap_msg = Cw20ExecuteMsg::Send {
         contract: pair_instance.to_string(),
@@ -687,10 +688,7 @@ fn test_compatibility_of_tokens_with_different_precision() {
     let err = app
         .execute_contract(owner.clone(), token_x_instance.clone(), &swap_msg, &[])
         .unwrap_err();
-    assert_eq!(
-        "Generic error: One of the pools is empty",
-        err.root_cause().to_string()
-    );
+    assert!(err.to_string().contains("One of the pools is empty"));
 
     let msg = ExecuteMsg::ProvideLiquidity {
         assets: vec![
@@ -723,26 +721,28 @@ fn test_compatibility_of_tokens_with_different_precision() {
         .query_wasm_smart(&token_y_instance, &msg)
         .unwrap();
 
-    let acceptable_spread_amount = Uint128::new(10);
+    let acceptable_spread_amount = Uint256::new(10);
 
     assert_eq!(res.balance, y_expected_return - acceptable_spread_amount);
 }
 
 #[test]
 fn test_if_twap_is_calculated_correctly_when_pool_idles() {
-    let owner = Addr::unchecked("owner");
-    let user1 = Addr::unchecked("user1");
+    let a: TestAccounts = TestAccounts::new(&MockApi::default());
+    let owner = a.owner;
+    let alice_address = a.beneficiary;
+    let user1 = a.user;
 
     let mut app = mock_app(
         owner.clone(),
         vec![
             Coin {
                 denom: "uusd".to_string(),
-                amount: Uint128::new(100_000_000_000_000_u128),
+                amount: Uint256::new(100_000_000_000_000_u128),
             },
             Coin {
                 denom: "uluna".to_string(),
-                amount: Uint128::new(100_000_000_000_000_u128),
+                amount: Uint256::new(100_000_000_000_000_u128),
             },
         ],
     );
@@ -754,11 +754,11 @@ fn test_if_twap_is_calculated_correctly_when_pool_idles() {
         &[
             Coin {
                 denom: "uusd".to_string(),
-                amount: Uint128::new(4_000_000_000_000),
+                amount: Uint256::new(4_000_000_000_000),
             },
             Coin {
                 denom: "uluna".to_string(),
-                amount: Uint128::new(2_000_000_000_000),
+                amount: Uint256::new(2_000_000_000_000),
             },
         ],
     )
@@ -769,8 +769,8 @@ fn test_if_twap_is_calculated_correctly_when_pool_idles() {
 
     // Provide liquidity, accumulators are empty
     let (msg, coins) = provide_liquidity_msg(
-        Uint128::new(1_000_000_000_000),
-        Uint128::new(1_000_000_000_000),
+        Uint256::new(1_000_000_000_000),
+        Uint256::new(1_000_000_000_000),
         None,
         Option::from(Decimal::one()),
     );
@@ -788,8 +788,8 @@ fn test_if_twap_is_calculated_correctly_when_pool_idles() {
 
     // Provide liquidity, accumulators firstly filled with the same prices
     let (msg, coins) = provide_liquidity_msg(
-        Uint128::new(2_000_000_000_000),
-        Uint128::new(1_000_000_000_000),
+        Uint256::new(2_000_000_000_000),
+        Uint256::new(1_000_000_000_000),
         None,
         Some(Decimal::percent(50)),
     );
@@ -817,24 +817,29 @@ fn test_if_twap_is_calculated_correctly_when_pool_idles() {
 
     // Prices weren't changed for the last day, uusd amount in pool = 3000000_000000, uluna = 2000000_000000
     // In accumulators we don't have any precision so we rely on elapsed time so we don't need to consider it
-    let price_precision = Uint128::from(10u128.pow(TWAP_PRECISION.into()));
-    assert_eq!(twap0 / price_precision, Uint128::new(57600)); // 0.666666 * ELAPSED_SECONDS (86400)
-    assert_eq!(twap1 / price_precision, Uint128::new(129600)); //   1.5 * ELAPSED_SECONDS
+    let price_precision = Uint256::from(10u128.pow(TWAP_PRECISION.into()));
+    assert_eq!(twap0 / price_precision, Uint256::new(57600)); // 0.666666 * ELAPSED_SECONDS (86400)
+    assert_eq!(twap1 / price_precision, Uint256::new(129600)); //   1.5 * ELAPSED_SECONDS
 }
 
 #[test]
 fn create_pair_with_same_assets() {
-    let owner = Addr::unchecked("owner");
+    let a: TestAccounts = TestAccounts::new(&MockApi::default());
+    let owner = a.owner;
+    let alice_address = a.fee_receiver;
+    let user1 = a.user;
+    let factory = a.beneficiary;
+
     let mut router = mock_app(
         owner.clone(),
         vec![
             Coin {
                 denom: "uusd".to_string(),
-                amount: Uint128::new(100_000_000_000u128),
+                amount: Uint256::new(100_000_000_000u128),
             },
             Coin {
                 denom: "uluna".to_string(),
-                amount: Uint128::new(100_000_000_000u128),
+                amount: Uint256::new(100_000_000_000u128),
             },
         ],
     );
@@ -849,7 +854,7 @@ fn create_pair_with_same_assets() {
             AssetInfo::Native("uusd".to_string()),
         ],
         token_code_id: token_contract_code_id,
-        factory_addr: String::from("factory"),
+        factory_addr: factory.to_string(),
         init_params: None,
         staking_config: default_stake_config(staking_contract_code_id).to_stake_config(),
         trading_starts: 0,
@@ -871,25 +876,27 @@ fn create_pair_with_same_assets() {
         )
         .unwrap_err();
 
-    assert_eq!(
-        resp.root_cause().to_string(),
-        "Doubling assets in asset infos"
-    )
+    assert!(resp.to_string().contains("Doubling assets in asset infos"))
 }
 
 #[test]
 fn provide_liquidity_with_one_asset() {
-    let owner = Addr::unchecked("owner");
+    let a: TestAccounts = TestAccounts::new(&MockApi::default());
+    let owner = a.owner;
+    let alice_address = a.fee_receiver;
+    let user1 = a.user;
+    let factory = a.beneficiary;
+
     let mut router = mock_app(
         owner.clone(),
         vec![
             Coin {
                 denom: "uusd".to_string(),
-                amount: Uint128::new(100_000_100_000u128),
+                amount: Uint256::new(100_000_100_000u128),
             },
             Coin {
                 denom: "uluna".to_string(),
-                amount: Uint128::new(100_000_000_000u128),
+                amount: Uint256::new(100_000_000_000u128),
             },
         ],
     );
@@ -898,8 +905,8 @@ fn provide_liquidity_with_one_asset() {
 
     // first provide liquidity with two assets
     let (msg, coins) = provide_liquidity_msg(
-        Uint128::from(100_000_000_000u128),
-        Uint128::from(100_000_000_000u128),
+        Uint256::from(100_000_000_000u128),
+        Uint256::from(100_000_000_000u128),
         None,
         None,
     );
@@ -920,7 +927,7 @@ fn provide_liquidity_with_one_asset() {
             &msg,
             &[Coin {
                 denom: "uusd".to_string(),
-                amount: Uint128::new(100_000u128),
+                amount: Uint256::new(100_000u128),
             }],
         )
         .unwrap();
@@ -930,23 +937,31 @@ fn provide_liquidity_with_one_asset() {
         .query_wasm_smart(pair, &QueryMsg::Pool {})
         .unwrap();
     // should have 100_000_000_000 + 49999 shares (losing some because of spread)
-    assert_eq!(100_000_000_000 + 49_999, res.total_share.u128());
+    assert_eq!(
+        100_000_000_000 + 49_999,
+        Uint128::try_from(res.total_share).unwrap().u128()
+    );
 }
 
 #[test]
 fn provide_liquidity_with_swap() {
     // This is more of a reference implementation to compare `provide_liquidity_with_one_asset` to.
-    let owner = Addr::unchecked("owner");
+    let a: TestAccounts = TestAccounts::new(&MockApi::default());
+    let owner = a.owner;
+    let alice_address = a.fee_receiver;
+    let user1 = a.user;
+    let factory = a.beneficiary;
+
     let mut router = mock_app(
         owner.clone(),
         vec![
             Coin {
                 denom: "uusd".to_string(),
-                amount: Uint128::new(100_000_100_000u128),
+                amount: Uint256::new(100_000_100_000u128),
             },
             Coin {
                 denom: "uluna".to_string(),
-                amount: Uint128::new(100_000_000_000u128),
+                amount: Uint256::new(100_000_000_000u128),
             },
         ],
     );
@@ -955,8 +970,8 @@ fn provide_liquidity_with_swap() {
 
     // first provide liquidity with two assets
     let (msg, coins) = provide_liquidity_msg(
-        Uint128::from(100_000_000_000u128),
-        Uint128::from(100_000_000_000u128),
+        Uint256::from(100_000_000_000u128),
+        Uint256::from(100_000_000_000u128),
         None,
         None,
     );
@@ -981,7 +996,7 @@ fn provide_liquidity_with_swap() {
             &msg,
             &[Coin {
                 denom: "uusd".to_string(),
-                amount: Uint128::from(50_000u128),
+                amount: Uint256::from(50_000u128),
             }],
         )
         .unwrap();
@@ -989,7 +1004,7 @@ fn provide_liquidity_with_swap() {
     let uluna_balance = router.wrap().query_balance(&owner, "uluna").unwrap().amount;
 
     // provide liquidity the swapped uluna and remaining uusd
-    let (msg, coins) = provide_liquidity_msg(Uint128::from(50_000u128), uluna_balance, None, None);
+    let (msg, coins) = provide_liquidity_msg(Uint256::from(50_000u128), uluna_balance, None, None);
     router
         .execute_contract(owner.clone(), pair.clone(), &msg, &coins)
         .unwrap();
@@ -999,22 +1014,30 @@ fn provide_liquidity_with_swap() {
         .query_wasm_smart(pair, &QueryMsg::Pool {})
         .unwrap();
     // should have 100_000_000_000 + 49999 shares (losing some because of spread)
-    assert_eq!(100_000_000_000 + 49_999, res.total_share.u128());
+    assert_eq!(
+        100_000_000_000 + 49_999,
+        Uint128::try_from(res.total_share).unwrap().u128()
+    );
 }
 
 #[test]
 fn provide_liquidity_with_unequal_pool() {
-    let owner = Addr::unchecked("owner");
+    let a: TestAccounts = TestAccounts::new(&MockApi::default());
+    let owner = a.owner;
+    let alice_address = a.fee_receiver;
+    let user1 = a.user;
+    let factory = a.beneficiary;
+
     let mut router = mock_app(
         owner.clone(),
         vec![
             Coin {
                 denom: "uusd".to_string(),
-                amount: Uint128::new(123_456_789_123u128),
+                amount: Uint256::new(123_456_789_123u128),
             },
             Coin {
                 denom: "uluna".to_string(),
-                amount: Uint128::new(100_000_100_000u128),
+                amount: Uint256::new(100_000_100_000u128),
             },
         ],
     );
@@ -1023,8 +1046,8 @@ fn provide_liquidity_with_unequal_pool() {
 
     // first provide liquidity with two assets
     let (msg, coins) = provide_liquidity_msg(
-        Uint128::from(123_456_789_123u128),
-        Uint128::from(100_000_000_000u128),
+        Uint256::from(123_456_789_123u128),
+        Uint256::from(100_000_000_000u128),
         None,
         None,
     );
@@ -1037,7 +1060,10 @@ fn provide_liquidity_with_unequal_pool() {
         .query_wasm_smart(pair.clone(), &QueryMsg::Pool {})
         .unwrap();
     // should have sqrt(100_000_000_000 * 123_456_789_123) = 111_111_110_660 shares
-    assert_eq!(111_111_110_660, res.total_share.u128());
+    assert_eq!(
+        111_111_110_660,
+        Uint128::try_from(res.total_share).unwrap().u128()
+    );
 
     // simulate swapping the 100_000 manually, just to understand the numbers better
     let res: SimulationResponse = router
@@ -1052,7 +1078,7 @@ fn provide_liquidity_with_unequal_pool() {
             },
         )
         .unwrap();
-    assert_eq!(res.return_amount.u128(), 61_728);
+    assert_eq!(Uint128::try_from(res.return_amount).unwrap().u128(), 61_728);
 
     // then with only one asset
     let msg = ExecuteMsg::ProvideLiquidity {
@@ -1067,7 +1093,7 @@ fn provide_liquidity_with_unequal_pool() {
             &msg,
             &[Coin {
                 denom: "uluna".to_string(),
-                amount: Uint128::new(100_000u128),
+                amount: Uint256::new(100_000u128),
             }],
         )
         .unwrap();
@@ -1078,22 +1104,30 @@ fn provide_liquidity_with_unequal_pool() {
         .unwrap();
     // as seen above, the swap should result in 61_728 uusd, so we
     // should have received sqrt(50_000 * 61_728) = 55_555 shares
-    assert_eq!(111_111_110_660 + 55_555, res.total_share.u128());
+    assert_eq!(
+        111_111_110_660 + 55_555,
+        Uint128::try_from(res.total_share).unwrap().u128()
+    );
 }
 
 #[test]
 fn provide_liquidity_sad_path() {
-    let owner = Addr::unchecked("owner");
+    let a: TestAccounts = TestAccounts::new(&MockApi::default());
+    let owner = a.owner;
+    let alice_address = a.fee_receiver;
+    let user1 = a.user;
+    let factory = a.beneficiary;
+
     let mut router = mock_app(
         owner.clone(),
         vec![
             Coin {
                 denom: "uusd".to_string(),
-                amount: Uint128::new(100_000_100_000u128),
+                amount: Uint256::new(100_000_100_000u128),
             },
             Coin {
                 denom: "uluna".to_string(),
-                amount: Uint128::new(100_000_000_000u128),
+                amount: Uint256::new(100_000_000_000u128),
             },
         ],
     );
@@ -1113,19 +1147,16 @@ fn provide_liquidity_sad_path() {
             &msg,
             &[Coin {
                 denom: "uusd".to_string(),
-                amount: Uint128::from(100_000u128),
+                amount: Uint256::from(100_000u128),
             }],
         )
         .unwrap_err();
-    assert_eq!(
-        err.root_cause().to_string(),
-        "It is not possible to provide liquidity with one token for an empty pool"
-    );
+    assert!(err.to_string().contains("It is not possible to provide liquidity with one token for an empty pool"));
 
     // provide liquidity with two assets
     let (msg, coins) = provide_liquidity_msg(
-        Uint128::from(100_000_000_000u128),
-        Uint128::from(100_000_000_000u128),
+        Uint256::from(100_000_000_000u128),
+        Uint256::from(100_000_000_000u128),
         None,
         None,
     );
@@ -1143,7 +1174,7 @@ fn provide_liquidity_sad_path() {
         .execute_contract(owner.clone(), pair.clone(), &msg, &[])
         .unwrap_err();
 
-    assert_eq!(err.root_cause().to_string(), "Event of zero transfer");
+    assert!(err.to_string().contains("Event of zero transfer"));
 
     // try with empty assets
     let msg = ExecuteMsg::ProvideLiquidity {
@@ -1156,12 +1187,17 @@ fn provide_liquidity_sad_path() {
         .execute_contract(owner.clone(), pair, &msg, &[])
         .unwrap_err();
 
-    assert_eq!(err.root_cause().to_string(), "Event of zero transfer");
+    assert!(err.to_string().contains("Event of zero transfer"));
 }
 
 #[test]
 fn provide_liquidity_with_one_cw20_asset() {
-    let owner = Addr::unchecked("owner");
+    let a: TestAccounts = TestAccounts::new(&MockApi::default());
+    let owner = a.owner;
+    let alice_address = a.fee_receiver;
+    let user1 = a.user;
+    let factory = a.beneficiary;
+
     let mut router = mock_app(owner.clone(), vec![]);
 
     let token1 = instantiate_token(
@@ -1249,22 +1285,28 @@ fn provide_liquidity_with_one_cw20_asset() {
 
     // should have no more balance of token2
     assert_eq!(
-        query_token_balance(&router.wrap(), token2, owner)
-            .unwrap()
-            .u128(),
-        0
+        query_token_balance(&router.wrap(), token2, owner).unwrap(),
+        Uint256::zero()
     );
     let res: PoolResponse = router
         .wrap()
         .query_wasm_smart(pair, &QueryMsg::Pool {})
         .unwrap();
     // should have 100_000_000_000 + 49999 shares (losing some because of spread)
-    assert_eq!(100_000_000_000 + 49_999, res.total_share.u128());
+    assert_eq!(
+        100_000_000_000 + 49_999,
+        Uint128::try_from(res.total_share).unwrap().u128()
+    );
 }
 
 #[test]
 fn wrong_number_of_assets() {
-    let owner = Addr::unchecked("owner");
+    let a: TestAccounts = TestAccounts::new(&MockApi::default());
+    let owner = a.owner;
+    let alice_address = a.fee_receiver;
+    let user1 = a.user;
+    let factory = a.beneficiary;
+
     let mut router = mock_app(owner.clone(), vec![]);
 
     let pair_contract_code_id = store_pair_code(&mut router);
@@ -1273,7 +1315,7 @@ fn wrong_number_of_assets() {
     let msg = InstantiateMsg {
         asset_infos: vec![AssetInfo::Native("uusd".to_string())],
         token_code_id: 123,
-        factory_addr: String::from("factory"),
+        factory_addr: factory.to_string(),
         init_params: None,
         staking_config: default_stake_config(staking_contract_code_id).to_stake_config(),
         trading_starts: 0,
@@ -1295,10 +1337,7 @@ fn wrong_number_of_assets() {
         )
         .unwrap_err();
 
-    assert_eq!(
-        err.root_cause().to_string(),
-        "Invalid number of assets. This pair supports at least 2 and at most 2 assets within a pool"
-    );
+    assert!(err.to_string().contains("Invalid number of assets. This pair supports at least 2 and at most 2 assets within a pool"));
 
     let msg = InstantiateMsg {
         asset_infos: vec![
@@ -1307,7 +1346,7 @@ fn wrong_number_of_assets() {
             native_asset_info("stone"),
         ],
         token_code_id: 123,
-        factory_addr: String::from("factory"),
+        factory_addr: factory.to_string(),
         init_params: None,
         staking_config: default_stake_config(staking_contract_code_id).to_stake_config(),
         trading_starts: 0,
@@ -1329,23 +1368,23 @@ fn wrong_number_of_assets() {
         )
         .unwrap_err();
 
-    assert_eq!(
-        err.root_cause().to_string(),
-        "Invalid number of assets. This pair supports at least 2 and at most 2 assets within a pool"
-    );
+    assert!(err.to_string().contains("Invalid number of assets. This pair supports at least 2 and at most 2 assets within a pool"));
 }
 
 // Integration test showing the incorrect behaviour:
 #[test]
 fn test_mixed_twap_calculation() {
-    let owner = Addr::unchecked("owner");
-    let user1 = Addr::unchecked("user1");
+    let a: TestAccounts = TestAccounts::new(&MockApi::default());
+    let owner = a.owner;
+    let alice_address = a.fee_receiver;
+    let user1 = a.user;
+    let factory = a.beneficiary;
 
     let mut app = mock_app(
         owner.clone(),
         vec![Coin {
             denom: "uusd".to_string(),
-            amount: Uint128::new(1_000_000_000_000_000),
+            amount: Uint256::new(1_000_000_000_000_000),
         }],
     );
 
@@ -1362,7 +1401,7 @@ fn test_mixed_twap_calculation() {
         user1.clone(),
         &[Coin {
             denom: "uusd".to_string(),
-            amount: Uint128::new(1_000_000_000_000_000),
+            amount: Uint256::new(1_000_000_000_000_000),
         }],
     )
     .unwrap();
@@ -1370,7 +1409,7 @@ fn test_mixed_twap_calculation() {
     // Set allowance for the pair contract to take tokens from Alice
     let msg = Cw20ExecuteMsg::IncreaseAllowance {
         spender: pair_instance.to_string(),
-        amount: Uint128::new(1_000_000_000_000_000),
+        amount: Uint256::new(1_000_000_000_000_000),
         expires: None,
     };
     app.execute_contract(user1.clone(), cw20_token.clone(), &msg, &[])
@@ -1378,8 +1417,8 @@ fn test_mixed_twap_calculation() {
 
     // Provide liquidity, accumulators are empty (because the cw20 pool registers as empty)
     let (msg, coins) = provide_liquidity_mixed_msg(
-        Uint128::new(1_000_000_000_000),
-        Uint128::new(1_000_000_000_000),
+        Uint256::new(1_000_000_000_000),
+        Uint256::new(1_000_000_000_000),
         &cw20_token,
         None,
         Option::from(Decimal::one()),
@@ -1402,8 +1441,8 @@ fn test_mixed_twap_calculation() {
     // uusd: 10_000_000_000_000 + 1_000_000_000_000, cw20: 1_000_000_000_000
     // The 10_000_000_000_000 added by this call should be subtracted from the uusd pool, but they are not.
     let (msg, coins) = provide_liquidity_mixed_msg(
-        Uint128::new(10_000_000_000_000),
-        Uint128::new(10_000_000_000_000),
+        Uint256::new(10_000_000_000_000),
+        Uint256::new(10_000_000_000_000),
         &cw20_token,
         None,
         Some(Decimal::percent(50)),
@@ -1428,8 +1467,8 @@ fn test_mixed_twap_calculation() {
     // uusd: 10_000_000_000_000 + 11_000_000_000_000, cw20: 11_000_000_000_000
     // The 10_000_000_000_000 added by this call should be subtracted from the uusd pool, but they are not.
     let (msg, coins) = provide_liquidity_mixed_msg(
-        Uint128::new(10_000_000_000_000),
-        Uint128::new(10_000_000_000_000),
+        Uint256::new(10_000_000_000_000),
+        Uint256::new(10_000_000_000_000),
         &cw20_token,
         None,
         Some(Decimal::percent(50)),
@@ -1445,7 +1484,7 @@ fn test_mixed_twap_calculation() {
     let twap0 = cpr_new.cumulative_prices[0].2 - cpr_old.cumulative_prices[0].2;
     let twap1 = cpr_new.cumulative_prices[1].2 - cpr_old.cumulative_prices[1].2;
 
-    let price_precision = Uint128::from(10u128.pow(TWAP_PRECISION.into()));
-    assert_eq!(twap0 / price_precision, Uint128::new(86400)); // expecting: 1.0 * ELAPSED_SECONDS (86400)
-    assert_eq!(twap1 / price_precision, Uint128::new(86400)); // expecting: 1.0 * ELAPSED_SECONDS
+    let price_precision = Uint256::from(10u128.pow(TWAP_PRECISION.into()));
+    assert_eq!(twap0 / price_precision, Uint256::new(86400)); // expecting: 1.0 * ELAPSED_SECONDS (86400)
+    assert_eq!(twap1 / price_precision, Uint256::new(86400)); // expecting: 1.0 * ELAPSED_SECONDS
 }

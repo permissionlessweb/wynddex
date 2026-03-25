@@ -1,5 +1,5 @@
 use anyhow::Result as AnyResult;
-use cosmwasm_std::{Addr, Binary, Decimal, Uint128};
+use cosmwasm_std::{Addr, Binary, Decimal256, Uint256};
 use cw20::MinterResponse;
 use cw_multi_test::{App, AppResponse, ContractWrapper, Executor};
 use wyndex::asset::AssetInfo;
@@ -101,11 +101,11 @@ impl FactoryHelper {
             token_code_id: cw20_token_code_id,
             fee_address: None,
             owner: owner.to_string(),
-            max_referral_commission: Decimal::one(),
+            max_referral_commission: Decimal256::one(),
             default_stake_config: DefaultStakeConfig {
                 staking_code_id,
-                tokens_per_power: Uint128::new(1000),
-                min_bond: Uint128::new(1000),
+                tokens_per_power: Uint256::new(1000),
+                min_bond: Uint256::new(1000),
                 unbonding_periods: vec![1, 2, 3],
                 max_distributions: 6,
                 converter: None,
@@ -149,6 +149,7 @@ impl FactoryHelper {
         };
 
         router.execute_contract(sender.clone(), self.factory.clone(), &msg, &[])
+            .map_err(|e| anyhow::anyhow!("{e}"))
     }
 
     pub fn create_pair(
@@ -174,6 +175,7 @@ impl FactoryHelper {
         };
 
         router.execute_contract(sender.clone(), self.factory.clone(), &msg, &[])
+            .map_err(|e| anyhow::anyhow!("{e}"))
     }
 
     #[allow(dead_code)]
@@ -186,6 +188,7 @@ impl FactoryHelper {
         let msg = wyndex::factory::ExecuteMsg::Deregister { asset_infos };
 
         router.execute_contract(sender.clone(), self.factory.clone(), &msg, &[])
+            .map_err(|e| anyhow::anyhow!("{e}"))
     }
 
     pub fn create_pair_with_addr(
@@ -205,7 +208,8 @@ impl FactoryHelper {
 
         let res: PairInfo = router
             .wrap()
-            .query_wasm_smart(self.factory.clone(), &QueryMsg::Pair { asset_infos })?;
+            .query_wasm_smart(self.factory.clone(), &QueryMsg::Pair { asset_infos })
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
 
         Ok(res.contract_addr)
     }
@@ -224,6 +228,7 @@ impl FactoryHelper {
         };
 
         router.execute_contract(sender.clone(), self.factory.clone(), &msg, &[])
+            .map_err(|e| anyhow::anyhow!("{e}"))
     }
 }
 

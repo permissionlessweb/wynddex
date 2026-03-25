@@ -3,8 +3,8 @@ use std::collections::{HashMap, HashSet};
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    to_json_binary, Addr, Binary, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo, Order, Response,
-    StdResult, SubMsg, Uint128, WasmMsg,
+    to_json_binary, Addr, Binary, CosmosMsg, Decimal256, Deps, DepsMut, Env, MessageInfo, Order, Response,
+    StdResult, SubMsg, Uint256, WasmMsg,
 };
 use cw2::set_contract_version;
 
@@ -40,7 +40,7 @@ pub fn instantiate(
         beneficiary: deps.api.addr_validate(&msg.beneficiary)?,
         token_contract: msg.token_contract.validate(deps.api)?,
         dex_factory_contract: deps.api.addr_validate(&msg.dex_factory_contract)?,
-        max_spread: msg.max_spread.ok_or(Decimal::zero()).unwrap(),
+        max_spread: msg.max_spread.ok_or(Decimal256::zero()).unwrap(),
     };
 
     CONFIG.save(deps.storage, &config)?;
@@ -78,7 +78,7 @@ pub fn spend(
     deps: DepsMut,
     info: MessageInfo,
     recipient: String,
-    amount: Uint128,
+    amount: Uint256,
 ) -> Result<Response, ContractError> {
     let cfg = CONFIG.load(deps.storage)?;
     // Permission check
@@ -94,7 +94,7 @@ pub fn spend(
             funds: vec![],
             msg: to_json_binary(&Cw20ExecuteMsg::Transfer {
                 recipient: recipient.clone(),
-                amount,
+                amount: amount.into(),
             })?,
         })])
         .add_attributes(vec![
@@ -151,8 +151,8 @@ fn swap(
     deps: Deps,
     cfg: &Config,
     from_token: AssetInfo,
-    amount_in: Uint128,
-    belief_price: Option<Decimal>,
+    amount_in: Uint256,
+    belief_price: Option<Decimal256>,
 ) -> Result<SwapTarget, ContractError> {
     let desired_token = AssetInfo::Token(cfg.token_contract.to_string());
     // Check if route tokens exist
@@ -202,7 +202,7 @@ fn swap_assets(
     contract_addr: &Addr,
     cfg: &Config,
     assets: Vec<AssetWithLimit>,
-    belief_price: Option<Decimal>,
+    belief_price: Option<Decimal256>,
 ) -> Result<Response, ContractError> {
     let mut response = Response::default();
     let mut route_assets = HashMap::new();
@@ -210,7 +210,7 @@ fn swap_assets(
         // Get balance
         let mut balance = asset.info.query_pool(&deps.querier, contract_addr)?;
         if let Some(limit) = asset.limit {
-            if limit < balance && limit > Uint128::zero() {
+            if limit < balance && limit > Uint256::zero() {
                 balance = limit;
             }
         }

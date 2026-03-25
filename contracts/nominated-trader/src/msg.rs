@@ -1,5 +1,5 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::{Decimal, Uint128};
+use cosmwasm_std::{Decimal256, Uint256};
 use wyndex::asset::{Asset, AssetInfo};
 
 #[cw_serde]
@@ -15,7 +15,7 @@ pub struct InstantiateMsg {
     /// The Wyndex factory contract address
     pub dex_factory_contract: String,
     /// The maximum spread used when swapping fee tokens to WYND
-    pub max_spread: Option<Decimal>,
+    pub max_spread: Option<Decimal256>,
 }
 
 #[cw_serde]
@@ -38,7 +38,7 @@ pub enum ExecuteMsg {
     /// No limit is specified for each asset and a maximum route depth is also exposed
     SwapHopAssets { assets: Vec<AssetInfo>, depth: u64 },
     /// Allows the owner to spend the contract's WYND balance. The trader contract will not be able to spend the WYND but can trade other assets to it.
-    Transfer { recipient: String, amount: Uint128 },
+    Transfer { recipient: String, amount: Uint256 },
 }
 
 #[cw_serde]
@@ -68,7 +68,7 @@ pub struct ConfigResponse {
     /// The Wyndex factory contract address
     pub dex_factory_contract: String,
     /// The maximum spread used when swapping fee tokens to WYND
-    pub max_spread: Decimal,
+    pub max_spread: Decimal256,
 }
 
 /// A custom struct used to return multiple asset balances.
@@ -93,5 +93,5 @@ pub struct AssetWithLimit {
     /// Information about the fee token to swap
     pub info: AssetInfo,
     /// The amount of tokens to swap
-    pub limit: Option<Uint128>,
+    pub limit: Option<Uint256>,
 }

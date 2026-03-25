@@ -1,6 +1,7 @@
 use std::str::FromStr;
 
-use cosmwasm_std::{assert_approx_eq, coin, Addr, Decimal, Fraction, Uint128};
+use cosmwasm_std::testing::MockApi;
+use cosmwasm_std::{assert_approx_eq, coin, Addr, Decimal, Decimal256, Fraction, Uint128, Uint256};
 use cw_multi_test::AppResponse;
 use wyndex::pair::LsdInfo;
 use wyndex::{
@@ -34,17 +35,20 @@ fn simulate_changing_rate() {
     ];
     for amp in AMPS {
         // these will be measured
-        let mut max_price_change = Decimal::zero();
-        let mut max_slippage = Uint128::zero();
+        let mut max_price_change = Decimal256::zero();
+        let mut max_slippage = Uint256::zero();
 
         let mut target_rate = Decimal::one() - liquidity_discount;
         let mut suite = SuiteBuilder::new()
-            .with_funds(TRADER, &[coin(tvl / 2, "juno")])
+            .with_funds(
+                &MockApi::default().addr_make(TRADER),
+                &[coin(tvl / 2, "juno")],
+            )
             .with_initial_target_rate(target_rate)
             .build();
         let start_time = suite.app.block_info().time.seconds();
 
-        let wy_juno = suite.instantiate_token("owner", "wyJUNO");
+        let wy_juno = suite.instantiate_token(&MockApi::default().addr_make("owner"), "wyJUNO");
         let wy_juno_info = AssetInfo::Token(wy_juno.to_string());
 
         // create the pair
@@ -76,7 +80,7 @@ fn simulate_changing_rate() {
             let swap_response = suite
                 .swap(
                     &pair,
-                    TRADER,
+                    &MockApi::default().addr_make(TRADER),
                     juno_info.with_balance(trade_volume),
                     wy_juno_info.clone(),
                     None,
@@ -91,14 +95,16 @@ fn simulate_changing_rate() {
             max_price_change = std::cmp::max(
                 max_price_change,
                 (std::cmp::max(price_after_swap, price) / std::cmp::min(price, price_after_swap))
-                    - Decimal::one(),
+                    - Decimal256::one(),
             );
 
-            let lsd_balance = suite.query_cw20_balance(TRADER, &wy_juno).unwrap();
+            let lsd_balance = suite
+                .query_cw20_balance(&MockApi::default().addr_make(TRADER), &wy_juno)
+                .unwrap();
             suite
                 .swap(
                     &pair,
-                    TRADER,
+                    &MockApi::default().addr_make(TRADER),
                     wy_juno_info.with_balance(lsd_balance),
                     juno_info.clone(),
                     None,
@@ -117,9 +123,9 @@ fn simulate_changing_rate() {
         println!(
             "amp {}, max_slippage {}%, max_price_change {}%",
             amp,
-            Decimal::from_ratio(max_slippage, trade_volume)
-                * Decimal::from_atomics(100u128, 0).unwrap(),
-            max_price_change * Decimal::from_atomics(100u128, 0).unwrap(),
+            Decimal256::from_ratio(max_slippage, Uint256::from(trade_volume))
+                * Decimal256::from_atomics(100u128, 0).unwrap(),
+            max_price_change * Decimal256::from_atomics(100u128, 0).unwrap(),
         );
     }
 }
@@ -146,24 +152,25 @@ fn simulate_slippage_vs_uniswap() {
     for price_diff in price_diffs {
         println!("amp,price_diff,direction,stableswap slippage,uniswap slippage");
         for amp in amps {
+            let trade_vol256 = Uint256::from(trade_volume);
             let sub_results = compare_to_uniswap(amp, juno_amount, trade_volume, price_diff, false);
             println!(
                 "{},-{},Juno => wyJuno,{}%,{}%",
                 amp,
                 price_diff,
-                Decimal::from_ratio(sub_results.stable_juno_to_lsd_slippage, trade_volume)
-                    * Decimal::from_atomics(100u128, 0).unwrap(),
-                Decimal::from_ratio(sub_results.uniswap_juno_to_lsd_slippage, trade_volume)
-                    * Decimal::from_atomics(100u128, 0).unwrap(),
+                Decimal256::from_ratio(sub_results.stable_juno_to_lsd_slippage, trade_vol256)
+                    * Decimal256::from_atomics(100u128, 0).unwrap(),
+                Decimal256::from_ratio(sub_results.uniswap_juno_to_lsd_slippage, trade_vol256)
+                    * Decimal256::from_atomics(100u128, 0).unwrap(),
             );
             println!(
                 "{},-{},wyJuno => Juno,{}%,{}%",
                 amp,
                 price_diff,
-                Decimal::from_ratio(sub_results.stable_lsd_to_juno_slippage, trade_volume)
-                    * Decimal::from_atomics(100u128, 0).unwrap(),
-                Decimal::from_ratio(sub_results.uniswap_lsd_to_juno_slippage, trade_volume)
-                    * Decimal::from_atomics(100u128, 0).unwrap(),
+                Decimal256::from_ratio(sub_results.stable_lsd_to_juno_slippage, trade_vol256)
+                    * Decimal256::from_atomics(100u128, 0).unwrap(),
+                Decimal256::from_ratio(sub_results.uniswap_lsd_to_juno_slippage, trade_vol256)
+                    * Decimal256::from_atomics(100u128, 0).unwrap(),
             );
 
             let add_results = compare_to_uniswap(amp, juno_amount, trade_volume, price_diff, true);
@@ -171,29 +178,29 @@ fn simulate_slippage_vs_uniswap() {
                 "{},{},Juno => wyJuno,{}%,{}%",
                 amp,
                 price_diff,
-                Decimal::from_ratio(add_results.stable_juno_to_lsd_slippage, trade_volume)
-                    * Decimal::from_atomics(100u128, 0).unwrap(),
-                Decimal::from_ratio(add_results.uniswap_juno_to_lsd_slippage, trade_volume)
-                    * Decimal::from_atomics(100u128, 0).unwrap(),
+                Decimal256::from_ratio(add_results.stable_juno_to_lsd_slippage, trade_vol256)
+                    * Decimal256::from_atomics(100u128, 0).unwrap(),
+                Decimal256::from_ratio(add_results.uniswap_juno_to_lsd_slippage, trade_vol256)
+                    * Decimal256::from_atomics(100u128, 0).unwrap(),
             );
             println!(
                 "{},{},wyJuno => Juno,{}%,{}%",
                 amp,
                 price_diff,
-                Decimal::from_ratio(add_results.stable_lsd_to_juno_slippage, trade_volume)
-                    * Decimal::from_atomics(100u128, 0).unwrap(),
-                Decimal::from_ratio(add_results.uniswap_lsd_to_juno_slippage, trade_volume)
-                    * Decimal::from_atomics(100u128, 0).unwrap(),
+                Decimal256::from_ratio(add_results.stable_lsd_to_juno_slippage, trade_vol256)
+                    * Decimal256::from_atomics(100u128, 0).unwrap(),
+                Decimal256::from_ratio(add_results.uniswap_lsd_to_juno_slippage, trade_vol256)
+                    * Decimal256::from_atomics(100u128, 0).unwrap(),
             );
         }
     }
 }
 
 struct SwapSlippage {
-    stable_juno_to_lsd_slippage: Uint128,
-    uniswap_juno_to_lsd_slippage: Uint128,
-    stable_lsd_to_juno_slippage: Uint128,
-    uniswap_lsd_to_juno_slippage: Uint128,
+    stable_juno_to_lsd_slippage: Uint256,
+    uniswap_juno_to_lsd_slippage: Uint256,
+    stable_lsd_to_juno_slippage: Uint256,
+    uniswap_lsd_to_juno_slippage: Uint256,
 }
 
 /// This simulates the slippage of a trade at the given difference to the target rate for the given amp
@@ -216,24 +223,29 @@ fn compare_to_uniswap(
     let juno_info = AssetInfo::Native("juno".to_string());
 
     // find lsd amount for stable swap
-    let lsd_amount = binary_search_lsd_provision(
+    let lsd_amount = Uint128::try_from(binary_search_lsd_provision(
         amp,
         expected_target_rate,
-        actual_target_rate,
+        actual_target_rate.into(),
         &juno_info.with_balance(juno_amount),
-    )
+    ))
+    .unwrap()
     .u128();
 
     let mut suite = SuiteBuilder::new()
-        .with_funds(TRADER, &[coin(juno_amount, "juno")])
+        .with_funds(
+            &MockApi::default().addr_make(TRADER),
+            &[coin(juno_amount, "juno")],
+        )
         .with_initial_target_rate(expected_target_rate)
         .build();
+    let owner = suite.app.api().addr_make("owner");
 
     // create lsd token for the stable pair
-    let wy_juno = suite.instantiate_token("owner", "wyJUNO");
+    let wy_juno = suite.instantiate_token(&owner, "wyJUNO");
     let wy_juno_info = AssetInfo::Token(wy_juno.to_string());
     // and one for the uniswap pair
-    let wy_juno2 = suite.instantiate_token("owner", "wyJUNO");
+    let wy_juno2 = suite.instantiate_token(&owner, "wyJUNO");
     let wy_juno2_info = AssetInfo::Token(wy_juno2.to_string());
 
     // create the stable pair
@@ -263,26 +275,29 @@ fn compare_to_uniswap(
             (juno_info.clone(), juno_amount),
             (
                 wy_juno2_info.clone(),
-                Uint128::new(juno_amount)
-                    .multiply_ratio(
-                        actual_target_rate.denominator(),
-                        actual_target_rate.numerator(),
-                    )
-                    .u128(),
+                Uint128::try_from(Uint256::new(juno_amount).multiply_ratio(
+                    actual_target_rate.denominator(),
+                    actual_target_rate.numerator(),
+                ))
+                .unwrap()
+                .u128(),
             ), // juno_amount / lsd_amount = actual_target_rate <=> lsd_amount = juno_amount / actual_target_rate
             vec![coin(juno_amount, "juno")],
         )
         .unwrap();
 
     // check that the prices are correct
+    let actual_target_rate256: Decimal256 = actual_target_rate.into();
     assert_approx_eq!(
-        query_price(&mut suite, &stable_pair, &wy_juno_info).numerator(),
-        actual_target_rate.numerator(),
+        Uint128::try_from(query_price(&mut suite, &stable_pair, &wy_juno_info).numerator())
+            .unwrap(),
+        Uint128::try_from(actual_target_rate256.numerator()).unwrap(),
         "0.000002"
     );
     assert_approx_eq!(
-        query_price(&mut suite, &uniswap_pair, &wy_juno2_info).numerator(),
-        actual_target_rate.numerator(),
+        Uint128::try_from(query_price(&mut suite, &uniswap_pair, &wy_juno2_info).numerator())
+            .unwrap(),
+        Uint128::try_from(actual_target_rate256.numerator()).unwrap(),
         "0.000002"
     );
 
@@ -297,7 +312,7 @@ fn compare_to_uniswap(
     // calculate slippage as: expected amount minus actual amount
     let swap_output = sim.return_amount + sim.commission_amount;
     let juno_wy_juno_slippage =
-        Uint128::new(trade_volume).saturating_sub(swap_output.mul_floor(actual_target_rate));
+        Uint256::new(trade_volume).saturating_sub(swap_output.mul_floor(actual_target_rate256));
 
     let sim = suite
         .query_simulation(
@@ -309,7 +324,7 @@ fn compare_to_uniswap(
     // calculate slippage as: expected amount minus actual amount
     let xyk_swap_output = sim.return_amount + sim.commission_amount;
     let xyk_juno_wy_juno_slippage =
-        Uint128::new(trade_volume).saturating_sub(xyk_swap_output.mul_floor(actual_target_rate));
+        Uint256::new(trade_volume).saturating_sub(xyk_swap_output.mul_floor(actual_target_rate256));
 
     let sim = suite
         .query_simulation(
@@ -320,7 +335,7 @@ fn compare_to_uniswap(
         .unwrap();
     // calculate slippage as: expected amount minus actual amount
     // we expect to receive the fair market price, which is `actual_target_rate`
-    let optimal_output = Uint128::new(trade_volume).mul_floor(actual_target_rate);
+    let optimal_output = Uint256::new(trade_volume).mul_floor(actual_target_rate256);
     let stable_swap_output = sim.return_amount + sim.commission_amount;
     let stable_slippage = optimal_output.saturating_sub(stable_swap_output);
 
@@ -359,20 +374,20 @@ fn update_target_rate(suite: &mut Suite, start_time: u64, liquidity_discount: De
 }
 
 /// Query price (including commission) for one LSD token
-fn query_price(suite: &mut Suite, pair: &Addr, input_asset: &AssetInfo) -> Decimal {
+fn query_price(suite: &mut Suite, pair: &Addr, input_asset: &AssetInfo) -> Decimal256 {
     // query price for one LSD token
     let simulation = suite
         .query_simulation(pair, input_asset.with_balance(1_000_000u128), None)
         .unwrap();
 
-    Decimal::from_ratio(
+    Decimal256::from_ratio(
         simulation.return_amount + simulation.commission_amount,
-        1_000_000u128,
+        Uint256::from(1_000_000u128),
     )
 }
 
-fn get_spread(swap_response: AppResponse) -> Uint128 {
-    Uint128::from_str(get_attribute(&swap_response, "spread_amount").unwrap()).unwrap()
+fn get_spread(swap_response: AppResponse) -> Uint256 {
+    Uint256::from_str(get_attribute(&swap_response, "spread_amount").unwrap()).unwrap()
 }
 
 fn get_attribute<'a>(swap_response: &'a AppResponse, key: &str) -> Option<&'a str> {
@@ -388,20 +403,21 @@ fn get_attribute<'a>(swap_response: &'a AppResponse, key: &str) -> Option<&'a st
 fn binary_search_lsd_provision(
     amp: u64,
     expected_target_rate: Decimal,
-    price: Decimal,
+    price: Decimal256,
     juno: &Asset,
-) -> Uint128 {
+) -> Uint256 {
     binary_search(
-        Uint128::one(),
-        juno.amount * Uint128::new(1000),
+        Uint256::one(),
+        juno.amount * Uint256::new(1000),
         price,
         |lsd_amount| {
+            let juno_u128 = Uint128::try_from(juno.amount).unwrap().u128();
             let mut suite = SuiteBuilder::new()
-                .with_funds(TRADER, &[coin(juno.amount.u128(), "juno")])
+                .with_funds(&MockApi::default().addr_make(TRADER), &[coin(juno_u128, "juno")])
                 .with_initial_target_rate(expected_target_rate)
                 .build();
 
-            let wy_juno = suite.instantiate_token("owner", "wyJUNO");
+            let wy_juno = suite.instantiate_token(&MockApi::default().addr_make("owner"), "wyJUNO");
             let wy_juno_info = AssetInfo::Token(wy_juno.to_string());
 
             // create the pair
@@ -417,9 +433,12 @@ fn binary_search_lsd_provision(
                             target_rate_epoch: DAY,
                         }),
                     }),
-                    (juno.info.clone(), juno.amount.u128()),
-                    (wy_juno_info.clone(), lsd_amount.u128()),
-                    vec![coin(juno.amount.u128(), "juno")],
+                    (juno.info.clone(), juno_u128),
+                    (
+                        wy_juno_info.clone(),
+                        Uint128::try_from(lsd_amount).unwrap().u128(),
+                    ),
+                    vec![coin(juno_u128, "juno")],
                 )
                 .unwrap();
 
@@ -428,22 +447,22 @@ fn binary_search_lsd_provision(
     )
 }
 
-/// A function that does binary search with a minimum and maximum Uint128 value
+/// A function that does binary search with a minimum and maximum Uint256 value
 fn binary_search(
-    mut min: Uint128,
-    mut max: Uint128,
-    find: Decimal,
-    f: impl Fn(Uint128) -> Decimal,
-) -> Uint128 {
-    const TWO: Uint128 = Uint128::new(2);
+    mut min: Uint256,
+    mut max: Uint256,
+    find: Decimal256,
+    f: impl Fn(Uint256) -> Decimal256,
+) -> Uint256 {
+    const TWO: Uint256 = Uint256::new(2);
     let mut half = max / TWO + min / TWO;
     let mut current = f(half);
 
     while min <= max {
         match current.cmp(&find) {
             std::cmp::Ordering::Equal => return half,
-            std::cmp::Ordering::Greater => min = half + Uint128::one(),
-            std::cmp::Ordering::Less => max = half - Uint128::one(),
+            std::cmp::Ordering::Greater => min = half + Uint256::one(),
+            std::cmp::Ordering::Less => max = half - Uint256::one(),
         }
         half = max / TWO + min / TWO;
         current = f(half);

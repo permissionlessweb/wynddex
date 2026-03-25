@@ -6,7 +6,7 @@ use crate::{
 };
 
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::{Addr, Binary, Decimal, Uint128};
+use cosmwasm_std::{Addr, Binary, Decimal256, Uint256};
 use cw20::Cw20ReceiveMsg;
 use cw_storage_plus::Map;
 use std::fmt::{Display, Formatter, Result};
@@ -70,7 +70,7 @@ pub struct InstantiateMsg {
     /// Address of owner that is allowed to change factory contract parameters.
     pub owner: String,
     /// Maximum referral commission
-    pub max_referral_commission: Decimal,
+    pub max_referral_commission: Decimal256,
     /// Default values for lp token staking contracts
     pub default_stake_config: DefaultStakeConfig,
     /// The block time until which trading is disabled
@@ -81,8 +81,8 @@ pub struct InstantiateMsg {
 pub struct DefaultStakeConfig {
     /// The staking contract code ID
     pub staking_code_id: u64,
-    pub tokens_per_power: Uint128,
-    pub min_bond: Uint128,
+    pub tokens_per_power: Uint256,
+    pub min_bond: Uint256,
     pub unbonding_periods: Vec<u64>,
     pub max_distributions: u32,
     /// Optional converter configuration for the staking contract
@@ -147,8 +147,8 @@ impl DefaultStakeConfig {
 #[cw_serde]
 pub struct PartialDefaultStakeConfig {
     pub staking_code_id: Option<u64>,
-    pub tokens_per_power: Option<Uint128>,
-    pub min_bond: Option<Uint128>,
+    pub tokens_per_power: Option<Uint256>,
+    pub min_bond: Option<Uint256>,
     pub unbonding_periods: Option<Vec<u64>>,
     pub max_distributions: Option<u32>,
 }
@@ -243,7 +243,7 @@ pub enum ExecuteMsg {
 
         /// Rewards multiplier by unbonding period for this distribution
         /// Only periods that are defined in the contract can be used here
-        rewards: Vec<(UnbondingPeriod, Decimal)>,
+        rewards: Vec<(UnbondingPeriod, Decimal256)>,
     },
     /// Implements the Cw20 receiver interface.
     Receive(Cw20ReceiveMsg),
@@ -293,7 +293,7 @@ pub struct DistributionFlow {
 
     /// Rewards multiplier by unbonding period for this distribution
     /// Only periods that are defined in the contract can be used here
-    pub rewards: Vec<(UnbondingPeriod, Decimal)>,
+    pub rewards: Vec<(UnbondingPeriod, Decimal256)>,
     /// The number of seconds over which funded distributions are stretched.
     pub reward_duration: u64,
 }
@@ -304,8 +304,8 @@ pub struct DistributionFlow {
 pub struct PartialStakeConfig {
     /// The staking contract code ID
     pub staking_code_id: Option<u64>,
-    pub tokens_per_power: Option<Uint128>,
-    pub min_bond: Option<Uint128>,
+    pub tokens_per_power: Option<Uint256>,
+    pub min_bond: Option<Uint256>,
     pub unbonding_periods: Option<Vec<u64>>,
     pub max_distributions: Option<u32>,
     /// Optional converter configuration for the staking contract
@@ -365,7 +365,7 @@ pub struct ConfigResponse {
     /// Address of contract to send governance fees to (the protocol)
     pub fee_address: Option<Addr>,
     /// Maximum referral commission
-    pub max_referral_commission: Decimal,
+    pub max_referral_commission: Decimal256,
     /// When this is set to `true`, only the owner can create pairs
     pub only_owner_can_create_pairs: bool,
     /// The block time until which trading is disabled

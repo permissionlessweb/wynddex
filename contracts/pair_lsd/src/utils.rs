@@ -1,4 +1,4 @@
-use cosmwasm_std::{Decimal, Decimal256, Deps, Env, StdResult, Storage, Uint128, Uint256, Uint64};
+use cosmwasm_std::{Decimal256, Deps, Env, StdResult, Storage, Uint256, Uint64};
 use itertools::Itertools;
 use std::cmp::Ordering;
 
@@ -67,13 +67,13 @@ pub(crate) fn select_pools(
 pub(crate) fn compute_current_amp(config: &Config, env: &Env) -> StdResult<Uint64> {
     let block_time = env.block.time.seconds();
     if block_time < config.next_amp_time {
-        let elapsed_time: Uint128 = block_time.saturating_sub(config.init_amp_time).into();
+        let elapsed_time: Uint256 = block_time.saturating_sub(config.init_amp_time).into();
         let time_range = config
             .next_amp_time
             .saturating_sub(config.init_amp_time)
             .into();
-        let init_amp = Uint128::from(config.init_amp);
-        let next_amp = Uint128::from(config.next_amp);
+        let init_amp = Uint256::from(config.init_amp);
+        let next_amp = Uint256::from(config.next_amp);
 
         if next_amp > init_amp {
             let amp_range = next_amp - init_amp;
@@ -97,16 +97,16 @@ pub(crate) fn compute_current_amp(config: &Config, env: &Env) -> StdResult<Uint6
 ///
 /// * **new_precision** new precision to use when returning the `value`.
 pub(crate) fn adjust_precision(
-    value: Uint128,
+    value: Uint256,
     current_precision: u8,
     new_precision: u8,
-) -> StdResult<Uint128> {
+) -> StdResult<Uint256> {
     Ok(match current_precision.cmp(&new_precision) {
         Ordering::Equal => value,
-        Ordering::Less => value.checked_mul(Uint128::new(
+        Ordering::Less => value.checked_mul(Uint256::from(
             10_u128.pow((new_precision - current_precision) as u32),
         ))?,
-        Ordering::Greater => value.checked_div(Uint128::new(
+        Ordering::Greater => value.checked_div(Uint256::from(
             10_u128.pow((current_precision - new_precision) as u32),
         ))?,
     })
@@ -114,8 +114,8 @@ pub(crate) fn adjust_precision(
 
 /// Structure for internal use which represents swap result.
 pub(crate) struct SwapResult {
-    pub return_amount: Uint128,
-    pub spread_amount: Uint128,
+    pub return_amount: Uint256,
+    pub spread_amount: Uint256,
 }
 
 /// Returns the result of a swap in form of a [`SwapResult`] object.
@@ -148,10 +148,10 @@ pub(crate) fn compute_swap(
         config,
     )?;
 
-    let return_amount = ask_pool.amount.to_uint128_with_precision(token_precision)? - new_ask_pool;
+    let return_amount = ask_pool.amount.to_uint256_with_precision(token_precision)? - new_ask_pool;
     let offer_asset_amount = offer_asset
         .amount
-        .to_uint128_with_precision(token_precision)?;
+        .to_uint256_with_precision(token_precision)?;
 
     // We consider swap rate to be target_rate in stable swap thus any difference is considered as spread.
     let spread_amount = apply_rate(&offer_asset.info, offer_asset_amount, config)
@@ -181,7 +181,7 @@ pub fn accumulate_prices(
         return Ok(false);
     }
 
-    let time_elapsed = Uint128::from(block_time - config.block_time_last);
+    let time_elapsed = Uint256::from(block_time - config.block_time_last);
 
     if pools.iter().all(|pool| !pool.amount.is_zero()) {
         let immut_config = config.clone();
@@ -222,7 +222,7 @@ pub fn calc_new_price_a_per_b(
     env: &Env,
     config: &Config,
     pools: &[DecimalAsset],
-) -> Result<Decimal, ContractError> {
+) -> Result<Decimal256, ContractError> {
     calc_spot_price(
         deps,
         env,
@@ -240,7 +240,7 @@ pub fn calc_spot_price(
     offer: &AssetInfoValidated,
     ask: &AssetInfoValidated,
     pools: &[DecimalAsset],
-) -> Result<Decimal, ContractError> {
+) -> Result<Decimal256, ContractError> {
     let offer_asset = DecimalAsset {
         info: offer.clone(),
         // This is 1 unit (adjusted for number of decimals)
@@ -261,7 +261,7 @@ pub fn calc_spot_price(
 
     // Return amount is in number of base units. To make it decimal, we must divide by precision
     let decimals = get_precision(deps.storage, &ask_pool.info)?;
-    let price = Decimal::from_atomics(return_amount, decimals as u32).unwrap();
+    let price = Decimal256::from_atomics(return_amount, decimals as u32).unwrap();
     Ok(price)
 }
 
@@ -273,10 +273,10 @@ pub fn find_spot_price(
     offer: AssetInfoValidated,
     ask: AssetInfoValidated,
     pools: Vec<DecimalAsset>,
-    max_trade: Uint128,
-    target_price: Decimal,
+    max_trade: Uint256,
+    target_price: Decimal256,
     iterations: u8,
-) -> Result<Option<Uint128>, ContractError> {
+) -> Result<Option<Uint256>, ContractError> {
     // normalize the max_trade with precision
     let decimals = get_precision(deps.storage, &offer)?;
     let mut trade = Decimal256::from_atomics(max_trade, decimals as u32).unwrap();
@@ -321,7 +321,7 @@ pub fn recurse_bisect_spot_price(
     pools: &[DecimalAsset],
     min_trade: Decimal256,
     max_trade: Decimal256,
-    target_price: Decimal,
+    target_price: Decimal256,
     iterations: u8,
 ) -> Result<Decimal256, ContractError> {
     // at the end, return mid-point
