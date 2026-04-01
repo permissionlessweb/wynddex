@@ -1,8 +1,8 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    coins, to_json_binary, Addr, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo,
-    Response, StdResult, Uint256, WasmMsg,
+    to_json_binary, Addr, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response,
+    StdResult, Uint256, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw20::Cw20ExecuteMsg;
@@ -243,7 +243,11 @@ mod tests {
     const EPOCH_LENGTH: u64 = 86_400;
 
     fn default_addrs() -> Vec<Addr> {
-        vec![MockApi::default().addr_make("user"),MockApi::default().addr_make("factory"),MockApi::default().addr_make("owner")]
+        vec![
+            MockApi::default().addr_make("user"),
+            MockApi::default().addr_make("factory"),
+            MockApi::default().addr_make("owner"),
+        ]
     }
     #[test]
     fn proper_initialization() {
@@ -378,10 +382,9 @@ mod tests {
     #[test]
     fn update_rewards() {
         let amount = 2000u128;
-                let user = &default_addrs()[0].clone();
-                let factory = &default_addrs()[1].clone();
-                let owner = &default_addrs()[2].clone();
-
+        let user = &default_addrs()[0].clone();
+        let factory = &default_addrs()[1].clone();
+        let owner = &default_addrs()[2].clone();
 
         let mut deps = mock_dependencies();
         let msg = InstantiateMsg {
@@ -435,7 +438,9 @@ mod tests {
             wyndex::asset::AssetInfoValidated::Native("juno".to_string())
         );
         assert_eq!(
-            Uint128::try_from(config.rewards_asset.amount).unwrap().u128(),
+            Uint128::try_from(config.rewards_asset.amount)
+                .unwrap()
+                .u128(),
             2000,
         );
     }

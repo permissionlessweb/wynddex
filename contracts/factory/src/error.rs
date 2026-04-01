@@ -1,4 +1,4 @@
-use cosmwasm_std::{ConversionOverflowError, Decimal256, StdError, Uint128, Uint256};
+use cosmwasm_std::{ConversionOverflowError, Decimal256, StdError, Uint256};
 use thiserror::Error;
 
 /// This enum describes factory contract errors

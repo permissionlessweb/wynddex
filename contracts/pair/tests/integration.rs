@@ -346,7 +346,10 @@ fn test_provide_and_withdraw_liquidity() {
         res.events[1].attributes[1],
         attr("action", "provide_liquidity")
     );
-    assert_eq!(res.events[1].attributes[3], attr("receiver", alice_address.to_string()),);
+    assert_eq!(
+        res.events[1].attributes[3],
+        attr("receiver", alice_address.to_string()),
+    );
     assert_eq!(
         res.events[1].attributes[4],
         attr("assets", "100000000uusd, 100000000uluna")
@@ -356,13 +359,19 @@ fn test_provide_and_withdraw_liquidity() {
         attr("share", 99999000u128.to_string())
     );
     assert_eq!(res.events[3].attributes[1], attr("action", "mint"));
-    assert_eq!(res.events[3].attributes[2], attr("to", pair_instance.to_string()));
+    assert_eq!(
+        res.events[3].attributes[2],
+        attr("to", pair_instance.to_string())
+    );
     assert_eq!(
         res.events[3].attributes[3],
         attr("amount", 1000.to_string())
     );
     assert_eq!(res.events[5].attributes[1], attr("action", "mint"));
-    assert_eq!(res.events[5].attributes[2], attr("to", alice_address.to_string()));
+    assert_eq!(
+        res.events[5].attributes[2],
+        attr("to", alice_address.to_string())
+    );
     assert_eq!(
         res.events[5].attributes[3],
         attr("amount", 99999000.to_string())
@@ -384,7 +393,10 @@ fn test_provide_and_withdraw_liquidity() {
         res.events[1].attributes[1],
         attr("action", "provide_liquidity")
     );
-    assert_eq!(res.events[1].attributes[3], attr("receiver", bob.to_string()),);
+    assert_eq!(
+        res.events[1].attributes[3],
+        attr("receiver", bob.to_string()),
+    );
     assert_eq!(
         res.events[1].attributes[4],
         attr("assets", "100uusd, 100uluna")
@@ -457,7 +469,9 @@ fn test_provide_and_withdraw_liquidity() {
             }],
         )
         .unwrap_err();
-    assert!(err.to_string().contains("Asset mismatch between the requested and the stored asset in contract"));
+    assert!(err
+        .to_string()
+        .contains("Asset mismatch between the requested and the stored asset in contract"));
 
     // Check pair config
     let config: ConfigResponse = router
@@ -730,7 +744,7 @@ fn test_compatibility_of_tokens_with_different_precision() {
 fn test_if_twap_is_calculated_correctly_when_pool_idles() {
     let a: TestAccounts = TestAccounts::new(&MockApi::default());
     let owner = a.owner;
-    let alice_address = a.beneficiary;
+
     let user1 = a.user;
 
     let mut app = mock_app(
@@ -826,8 +840,7 @@ fn test_if_twap_is_calculated_correctly_when_pool_idles() {
 fn create_pair_with_same_assets() {
     let a: TestAccounts = TestAccounts::new(&MockApi::default());
     let owner = a.owner;
-    let alice_address = a.fee_receiver;
-    let user1 = a.user;
+
     let factory = a.beneficiary;
 
     let mut router = mock_app(
@@ -883,9 +896,6 @@ fn create_pair_with_same_assets() {
 fn provide_liquidity_with_one_asset() {
     let a: TestAccounts = TestAccounts::new(&MockApi::default());
     let owner = a.owner;
-    let alice_address = a.fee_receiver;
-    let user1 = a.user;
-    let factory = a.beneficiary;
 
     let mut router = mock_app(
         owner.clone(),
@@ -948,9 +958,6 @@ fn provide_liquidity_with_swap() {
     // This is more of a reference implementation to compare `provide_liquidity_with_one_asset` to.
     let a: TestAccounts = TestAccounts::new(&MockApi::default());
     let owner = a.owner;
-    let alice_address = a.fee_receiver;
-    let user1 = a.user;
-    let factory = a.beneficiary;
 
     let mut router = mock_app(
         owner.clone(),
@@ -1024,9 +1031,6 @@ fn provide_liquidity_with_swap() {
 fn provide_liquidity_with_unequal_pool() {
     let a: TestAccounts = TestAccounts::new(&MockApi::default());
     let owner = a.owner;
-    let alice_address = a.fee_receiver;
-    let user1 = a.user;
-    let factory = a.beneficiary;
 
     let mut router = mock_app(
         owner.clone(),
@@ -1114,9 +1118,6 @@ fn provide_liquidity_with_unequal_pool() {
 fn provide_liquidity_sad_path() {
     let a: TestAccounts = TestAccounts::new(&MockApi::default());
     let owner = a.owner;
-    let alice_address = a.fee_receiver;
-    let user1 = a.user;
-    let factory = a.beneficiary;
 
     let mut router = mock_app(
         owner.clone(),
@@ -1151,7 +1152,9 @@ fn provide_liquidity_sad_path() {
             }],
         )
         .unwrap_err();
-    assert!(err.to_string().contains("It is not possible to provide liquidity with one token for an empty pool"));
+    assert!(err
+        .to_string()
+        .contains("It is not possible to provide liquidity with one token for an empty pool"));
 
     // provide liquidity with two assets
     let (msg, coins) = provide_liquidity_msg(
@@ -1194,9 +1197,6 @@ fn provide_liquidity_sad_path() {
 fn provide_liquidity_with_one_cw20_asset() {
     let a: TestAccounts = TestAccounts::new(&MockApi::default());
     let owner = a.owner;
-    let alice_address = a.fee_receiver;
-    let user1 = a.user;
-    let factory = a.beneficiary;
 
     let mut router = mock_app(owner.clone(), vec![]);
 
@@ -1303,8 +1303,7 @@ fn provide_liquidity_with_one_cw20_asset() {
 fn wrong_number_of_assets() {
     let a: TestAccounts = TestAccounts::new(&MockApi::default());
     let owner = a.owner;
-    let alice_address = a.fee_receiver;
-    let user1 = a.user;
+
     let factory = a.beneficiary;
 
     let mut router = mock_app(owner.clone(), vec![]);
@@ -1376,9 +1375,7 @@ fn wrong_number_of_assets() {
 fn test_mixed_twap_calculation() {
     let a: TestAccounts = TestAccounts::new(&MockApi::default());
     let owner = a.owner;
-    let alice_address = a.fee_receiver;
     let user1 = a.user;
-    let factory = a.beneficiary;
 
     let mut app = mock_app(
         owner.clone(),

@@ -294,7 +294,6 @@ impl SuiteBuilder {
             gauge_adapter,
             cw20_code_id,
             reward: self.reward,
-            epoch_length,
         }
     }
 }
@@ -306,7 +305,6 @@ pub struct Suite {
     pub gauge_adapter: Addr,
     cw20_code_id: u64,
     pub reward: Asset,
-    pub epoch_length: u64,
 }
 
 impl Suite {

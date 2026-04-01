@@ -1,6 +1,6 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
 
-use cosmwasm_std::{Decimal, Decimal256, Uint256};
+use cosmwasm_std::{Decimal256, Uint256};
 use cw20::Cw20ReceiveMsg;
 
 use wyndex::asset::{AssetInfo, AssetValidated};

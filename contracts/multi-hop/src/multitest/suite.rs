@@ -1,6 +1,4 @@
 use anyhow::Result as AnyResult;
-
-use cosmwasm_std::testing::MockApi;
 use cosmwasm_std::{coin, to_json_binary, Addr, Coin, Decimal256, Uint128, Uint256};
 use cw20::{BalanceResponse, Cw20ExecuteMsg, Cw20QueryMsg, MinterResponse};
 use cw20_base::msg::InstantiateMsg as Cw20BaseInstantiateMsg;

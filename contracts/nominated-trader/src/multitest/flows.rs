@@ -10,7 +10,7 @@ mod fail_cases {
     use crate::msg::AssetWithLimit;
     use crate::multitest::suite::SuiteBuilder;
 
-    use cosmwasm_std::{Addr, Uint256};
+    use cosmwasm_std::Uint256;
     use wyndex::asset::token_asset_info;
     use wyndex::asset::AssetInfo;
 

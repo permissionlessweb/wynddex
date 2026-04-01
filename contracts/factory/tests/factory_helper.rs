@@ -11,8 +11,6 @@ use wyndex::fee_config::FeeConfig;
 use wyndex::pair::PairInfo;
 
 pub struct FactoryHelper {
-    pub owner: Addr,
-    pub astro_token: Addr,
     pub factory: Addr,
     pub cw20_token_code_id: u64,
 }
@@ -43,8 +41,7 @@ impl FactoryHelper {
             }),
             marketing: None,
         };
-
-        let astro_token = router
+        router
             .instantiate_contract(
                 cw20_token_code_id,
                 owner.clone(),
@@ -125,8 +122,6 @@ impl FactoryHelper {
             .unwrap();
 
         Self {
-            owner: owner.clone(),
-            astro_token,
             factory,
             cw20_token_code_id,
         }
@@ -148,7 +143,8 @@ impl FactoryHelper {
             default_stake_config,
         };
 
-        router.execute_contract(sender.clone(), self.factory.clone(), &msg, &[])
+        router
+            .execute_contract(sender.clone(), self.factory.clone(), &msg, &[])
             .map_err(|e| anyhow::anyhow!("{e}"))
     }
 
@@ -174,7 +170,8 @@ impl FactoryHelper {
             total_fee_bps: None,
         };
 
-        router.execute_contract(sender.clone(), self.factory.clone(), &msg, &[])
+        router
+            .execute_contract(sender.clone(), self.factory.clone(), &msg, &[])
             .map_err(|e| anyhow::anyhow!("{e}"))
     }
 
@@ -187,7 +184,8 @@ impl FactoryHelper {
     ) -> AnyResult<AppResponse> {
         let msg = wyndex::factory::ExecuteMsg::Deregister { asset_infos };
 
-        router.execute_contract(sender.clone(), self.factory.clone(), &msg, &[])
+        router
+            .execute_contract(sender.clone(), self.factory.clone(), &msg, &[])
             .map_err(|e| anyhow::anyhow!("{e}"))
     }
 
@@ -227,7 +225,8 @@ impl FactoryHelper {
             fee_config,
         };
 
-        router.execute_contract(sender.clone(), self.factory.clone(), &msg, &[])
+        router
+            .execute_contract(sender.clone(), self.factory.clone(), &msg, &[])
             .map_err(|e| anyhow::anyhow!("{e}"))
     }
 }

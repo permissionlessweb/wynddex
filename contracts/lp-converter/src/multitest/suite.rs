@@ -110,7 +110,7 @@ pub(super) fn native_asset(amount: u128, denom: &str) -> Asset {
 #[derive(Debug)]
 pub struct SuiteBuilder {
     pub unbonding_periods: Vec<UnbondingPeriod>,
-    pub admin: Option<String>,
+
     pub native_balances: Vec<(Addr, Coin)>,
     pub no_converter: bool,
 }
@@ -119,7 +119,6 @@ impl SuiteBuilder {
     pub fn new() -> Self {
         Self {
             unbonding_periods: vec![7 * DAY, 14 * DAY],
-            admin: None,
             native_balances: vec![],
             no_converter: false,
         }

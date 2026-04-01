@@ -619,7 +619,6 @@ pub fn migrate(deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, C
 
 #[cfg(test)]
 mod testing {
-    use cosmwasm_std::testing::MockApi;
     use cw_multi_test::App;
     use wyndex_test_helpers::TestAccounts;
 

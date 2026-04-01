@@ -14,7 +14,6 @@ use wyndex::asset::{
     addr_opt_validate, check_swap_parameters, Asset, AssetInfoValidated, AssetValidated,
     MINIMUM_LIQUIDITY_AMOUNT,
 };
-use wyndex::decimal2decimal256;
 use wyndex::factory::{ConfigResponse as FactoryConfig, PairType};
 use wyndex::fee_config::FeeConfig;
 use wyndex::pair::{
