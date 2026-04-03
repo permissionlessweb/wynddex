@@ -23,9 +23,9 @@ repository = "https://github.com/cosmorama/wynddex"
 
 [workspace.dependencies]
 anyhow = "1"
-cw2 = "3.0.0"
-cosmwasm-schema = "3.0.1"
-cosmwasm-std = "3.0.1"
+cw2 = { path = "../cw-minus/packages/cw2" }
+cosmwasm-schema = "3.0.4"
+cosmwasm-std = "3.0.4"
 cw-controllers = { path = "../cw-minus/packages/controllers" }
 cw-multi-test = { version = "3.0.0", features = ["staking"], git = "https://github.com/permissionlessweb/cw-multi-test" }
 cw-placeholder = { path = "./contracts/cw-placeholder" }

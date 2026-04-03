@@ -685,21 +685,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cw-controllers"
-version = "3.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5b8b9a060524f8c5bff8c736e890fb52a16533e7107c6c41e1cae6077c177516"
-dependencies = [
- "cosmwasm-schema 3.0.4",
- "cosmwasm-std 3.0.4",
- "cw-storage-plus 3.0.1",
- "cw-utils 3.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "schemars 0.8.22",
- "serde",
- "thiserror 2.0.18",
-]
-
-[[package]]
 name = "cw-multi-test"
 version = "3.0.1"
 source = "git+https://github.com/permissionlessweb/cw-multi-test#741fccda84d887bed0be6aec9a04a5bd661a8e48"
@@ -862,8 +847,6 @@ dependencies = [
 [[package]]
 name = "cw2"
 version = "3.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "50582114ab739724c25a27cea1785351f2b5fea7968214302e0023ee2c0e8b39"
 dependencies = [
  "cosmwasm-schema 3.0.4",
  "cosmwasm-std 3.0.4",
@@ -893,19 +876,7 @@ version = "3.0.0"
 dependencies = [
  "cosmwasm-schema 3.0.4",
  "cosmwasm-std 3.0.4",
- "cw-utils 3.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "schemars 0.8.22",
- "serde",
-]
-
-[[package]]
-name = "cw20"
-version = "3.0.0"
-source = "git+https://github.com/permissionlessweb/cw-plus#c74717433db9fcd86ac408c1b7fbc0c35caefaa3"
-dependencies = [
- "cosmwasm-schema 3.0.4",
- "cosmwasm-std 3.0.4",
- "cw-utils 3.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "cw-utils 3.0.0",
  "schemars 0.8.22",
  "serde",
 ]
@@ -936,22 +907,6 @@ dependencies = [
  "cw-storage-plus 3.0.1",
  "cw2 3.0.0",
  "cw20 3.0.0",
- "schemars 0.8.22",
- "semver",
- "serde",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "cw20-base"
-version = "3.0.0"
-source = "git+https://github.com/permissionlessweb/cw-plus#c74717433db9fcd86ac408c1b7fbc0c35caefaa3"
-dependencies = [
- "cosmwasm-schema 3.0.4",
- "cosmwasm-std 3.0.4",
- "cw-storage-plus 3.0.1",
- "cw2 3.0.0",
- "cw20 3.0.0 (git+https://github.com/permissionlessweb/cw-plus)",
  "schemars 0.8.22",
  "semver",
  "serde",
@@ -2611,12 +2566,12 @@ version = "1.3.0"
 dependencies = [
  "cosmwasm-schema 3.0.4",
  "cosmwasm-std 3.0.4",
- "cw-controllers 3.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "cw-controllers 3.0.0",
  "cw-storage-plus 3.0.1",
- "cw-utils 3.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "cw-utils 3.0.0",
  "cw2 3.0.0",
- "cw20 3.0.0 (git+https://github.com/permissionlessweb/cw-plus)",
- "cw20-base 3.0.0 (git+https://github.com/permissionlessweb/cw-plus)",
+ "cw20 3.0.0",
+ "cw20-base 3.0.0",
  "semver",
  "thiserror 1.0.69",
 ]
