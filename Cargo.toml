@@ -28,7 +28,7 @@ cosmwasm-schema = { git = "https://github.com/permissionlessweb/cosmwasm", branc
 cosmwasm-std = { git = "https://github.com/permissionlessweb/cosmwasm", branch = "mvp" }
 cw-controllers = { git = "https://github.com/permissionlessweb/cw-minus", branch = "main" }
 cw-multi-test = { git = "https://github.com/permissionlessweb/cw-multi-test", branch = "mvp" }
-cw-placeholder = { path = "./contracts/cw-placeholder" }
+cw-placeholder = { path = "./contracts/cw-placeholder", features = ["library"] }
 cw-storage-plus = { git = "https://github.com/permissionlessweb/cw-storage-plus", branch = "mvp" }
 cw-utils = { git = "https://github.com/permissionlessweb/cw-minus", branch = "main" }
 cw20 = { git = "https://github.com/permissionlessweb/cw-plus", branch = "main" }
@@ -43,12 +43,12 @@ test-case = "2.2.1"
 thiserror = "1"
 uint = "0.9"
 wynd-lsd-hub = { path = "../wynd-lsd/contracts/lsd-hub", features = ["library"] }
-wyndex = { version = "2.2.0", path = "packages/wyndex" }
-wyndex-factory = { version = "2.2.0", path = "contracts/factory" }
-wyndex-multi-hop = { version = "2.2.0", path = "contracts/multi-hop" }
-wyndex-pair = { version = "2.2.0", path = "contracts/pair" }
-wyndex-pair-lsd = { path = "./contracts/pair_lsd" }
-wyndex-stake = { version = "2.2.0", path = "contracts/stake" }
+wyndex = { path = "./packages/wyndex" }
+wyndex-factory = { path = "./contracts/factory", features = ["library"] }
+wyndex-multi-hop = { path = "./contracts/multi-hop", features = ["library"] }
+wyndex-pair = { path = "./contracts/pair", features = ["library"] }
+wyndex-pair-lsd = { path = "./contracts/pair_lsd", features = ["library"] }
+wyndex-stake = { path = "./contracts/stake", features = ["library"] }
 wyndex-test-helpers = { path = "./packages/wyndex-test-helpers" }
 
 [profile.release]
