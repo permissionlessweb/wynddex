@@ -23,16 +23,16 @@ repository = "https://github.com/cosmorama/wynddex"
 
 [workspace.dependencies]
 anyhow = "1"
-cw2 = { path = "../cw-minus/packages/cw2" }
-cosmwasm-schema = "3.0.4"
-cosmwasm-std = "3.0.4"
-cw-controllers = { path = "../cw-minus/packages/controllers" }
-cw-multi-test = { version = "3.0.0", features = ["staking"], git = "https://github.com/permissionlessweb/cw-multi-test" }
+cw2 = { git = "https://github.com/permissionlessweb/cw-minus", branch = "main" }
+cosmwasm-schema = { git = "https://github.com/permissionlessweb/cosmwasm", branch = "mvp" }
+cosmwasm-std = { git = "https://github.com/permissionlessweb/cosmwasm", branch = "mvp" }
+cw-controllers = { git = "https://github.com/permissionlessweb/cw-minus", branch = "main" }
+cw-multi-test = { git = "https://github.com/permissionlessweb/cw-multi-test", branch = "mvp" }
 cw-placeholder = { path = "./contracts/cw-placeholder" }
-cw-storage-plus = "3.0.1"
-cw-utils  = { path = "../cw-minus/packages/cw-utils" }
-cw20 = { path = "../cw-plus/packages/cw20" }
-cw20-base = { path = "../cw-plus/contracts/cw20-base" }
+cw-storage-plus = { git = "https://github.com/permissionlessweb/cw-storage-plus", branch = "mvp" }
+cw-utils = { git = "https://github.com/permissionlessweb/cw-minus", branch = "main" }
+cw20 = { git = "https://github.com/permissionlessweb/cw-plus", branch = "main" }
+cw20-base = { git = "https://github.com/permissionlessweb/cw-plus", branch = "main" }
 derivative = "2.2"
 itertools = "0.10"
 lp-converter = { path = "./contracts/lp-converter", features = ["library"] }
