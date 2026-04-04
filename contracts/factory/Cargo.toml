@@ -33,5 +33,5 @@ anyhow = { workspace = true }
 cw-multi-test = { workspace = true }
 cw20 = { workspace = true }
 cw20-base = { workspace = true }
-wyndex-factory-2_1_0 = { package = "wyndex-factory", git = "https://github.com/wynddao/wynddex", tag = "v2.1.0" }
+wyndex-factory-2_1_0 = { package = "wyndex-factory", git = "https://github.com/permissionlessweb/wynddex", branch = "mvp" }
 wyndex-pair = { workspace = true }

@@ -43,12 +43,12 @@ test-case = "2.2.1"
 thiserror = "1"
 uint = "0.9"
 wynd-lsd-hub = { path = "../wynd-lsd/contracts/lsd-hub", features = ["library"] }
-wyndex = { path = "./packages/wyndex", default-features = false }
-wyndex-factory = { path = "./contracts/factory" }
-wyndex-multi-hop = { path = "./contracts/multi-hop" }
-wyndex-pair = { path = "./contracts/pair" }
+wyndex = { git = "https://github.com/permissionlessweb/wynddex", branch = "mvp" }
+wyndex-factory = { git = "https://github.com/permissionlessweb/wynddex", branch = "mvp" }
+wyndex-multi-hop = { git = "https://github.com/permissionlessweb/wynddex", branch = "mvp" }
+wyndex-pair = { git = "https://github.com/permissionlessweb/wynddex", branch = "mvp" }
 wyndex-pair-lsd = { path = "./contracts/pair_lsd" }
-wyndex-stake = { path = "./contracts/stake" }
+wyndex-stake = { git = "https://github.com/permissionlessweb/wynddex", branch = "mvp" }
 wyndex-test-helpers = { path = "./packages/wyndex-test-helpers" }
 
 [profile.release]

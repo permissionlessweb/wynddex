@@ -42,6 +42,6 @@ cw-multi-test = { workspace = true }
 cw20-base = { workspace = true }
 lp-converter = { workspace = true, features = ["library"] }
 test-case = { workspace = true }
-wyndex-2_0_0 = { package = "wyndex", git = "https://github.com/wynddao/wynddex", tag = "v2.0.2" }
+wyndex-2_0_0 = { package = "wyndex", git = "https://github.com/permissionlessweb/wynddex", branch = "mvp" }
 # migration test
-wyndex-stake-2_0_0 = { package = "wyndex-stake", git = "https://github.com/wynddao/wynddex", tag = "v2.0.2" }
+wyndex-stake-2_0_0 = { package = "wyndex-stake", git = "https://github.com/permissionlessweb/wynddex", branch = "mvp" }
