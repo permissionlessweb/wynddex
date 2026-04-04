@@ -42,7 +42,7 @@ serde = { version = "1", default-features = false, features = ["derive"] }
 test-case = "2.2.1"
 thiserror = "1"
 uint = "0.9"
-wynd-lsd-hub = { path = "../wynd-lsd/contracts/lsd-hub", features = ["library"] }
+wynd-lsd-hub = { git = "https://github.com/permissionlessweb/wynd-lsd", branch = "cw3", features = ["library"] }
 wyndex = { path = "./packages/wyndex" }
 wyndex-factory = { path = "./contracts/factory", features = ["library"] }
 wyndex-multi-hop = { path = "./contracts/multi-hop", features = ["library"] }
