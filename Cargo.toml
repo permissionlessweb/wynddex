@@ -29,7 +29,7 @@ cosmwasm-std = "3.0.4"
 cw-controllers = { path = "../cw-minus/packages/controllers" }
 cw-multi-test = { version = "3.0.0", features = ["staking"], git = "https://github.com/permissionlessweb/cw-multi-test" }
 cw-placeholder = { path = "./contracts/cw-placeholder" }
-cw-storage-plus = "3.0.0"
+cw-storage-plus = "3.0.1"
 cw-utils  = { path = "../cw-minus/packages/cw-utils" }
 cw20 = { path = "../cw-plus/packages/cw20" }
 cw20-base = { path = "../cw-plus/contracts/cw20-base" }
