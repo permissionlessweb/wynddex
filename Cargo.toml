@@ -23,16 +23,16 @@ repository = "https://github.com/cosmorama/wynddex"
 
 [workspace.dependencies]
 anyhow = "1"
-cw2 = { git = "https://github.com/permissionlessweb/cw-minus", branch = "main" }
-cosmwasm-schema = { git = "https://github.com/permissionlessweb/cosmwasm", branch = "mvp" }
-cosmwasm-std = { git = "https://github.com/permissionlessweb/cosmwasm", branch = "mvp" }
-cw-controllers = { git = "https://github.com/permissionlessweb/cw-minus", branch = "main" }
-cw-multi-test = { git = "https://github.com/permissionlessweb/cw-multi-test", branch = "mvp" }
-cw-placeholder = { path = "./contracts/cw-placeholder", features = ["library"] }
-cw-storage-plus = { git = "https://github.com/permissionlessweb/cw-storage-plus", branch = "mvp" }
-cw-utils = { git = "https://github.com/permissionlessweb/cw-minus", branch = "main" }
-cw20 = { git = "https://github.com/permissionlessweb/cw-plus", branch = "main" }
-cw20-base = { git = "https://github.com/permissionlessweb/cw-plus", branch = "main" }
+cw2 = { path = "../ZK/cw/zk-cw-minus/packages/cw2" }
+cosmwasm-schema = { path = "../ZK/cw/zk-cosmwasm/packages/schema" }
+cosmwasm-std = { path = "../ZK/cw/zk-cosmwasm/packages/std" }
+cw-controllers = { path = "../ZK/cw/zk-cw-minus/packages/controllers" }
+cw-multi-test = { path = "../cw-multi-test-fork" }
+cw-placeholder = { path = "contracts/cw-placeholder" }
+cw-storage-plus = { path = "../ZK/cw/zk-storage-plus" }
+cw-utils = { path = "../ZK/cw/zk-cw-minus/packages/cw-utils" }
+cw20 = { path = "../cw-plus/packages/cw20" }
+cw20-base = { path = "../cw-plus/contracts/cw20-base" }
 derivative = "2.2"
 itertools = "0.10"
 lp-converter = { path = "./contracts/lp-converter", features = ["library"] }
@@ -42,13 +42,13 @@ serde = { version = "1", default-features = false, features = ["derive"] }
 test-case = "2.2.1"
 thiserror = "1"
 uint = "0.9"
-wynd-lsd-hub = { git = "https://github.com/permissionlessweb/wynd-lsd", branch = "cw3", features = ["library"] }
-wyndex = { path = "./packages/wyndex" }
-wyndex-factory = { path = "./contracts/factory", features = ["library"] }
-wyndex-multi-hop = { path = "./contracts/multi-hop", features = ["library"] }
-wyndex-pair = { path = "./contracts/pair", features = ["library"] }
-wyndex-pair-lsd = { path = "./contracts/pair_lsd", features = ["library"] }
-wyndex-stake = { path = "./contracts/stake", features = ["library"] }
+wynd-lsd-hub = { path = "../wynd-lsd/contracts/lsd-hub" }
+wyndex = { path = "packages/wyndex" }
+wyndex-factory = { path = "contracts/factory" }
+wyndex-multi-hop = { path = "contracts/multi-hop" }
+wyndex-pair = { path = "contracts/pair" }
+wyndex-pair-lsd = { path = "contracts/pair_lsd" }
+wyndex-stake = { path = "contracts/stake" }
 wyndex-test-helpers = { path = "./packages/wyndex-test-helpers" }
 
 [profile.release]
