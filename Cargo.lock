@@ -528,7 +528,7 @@ dependencies = [
 [[package]]
 name = "cw-controllers"
 version = "3.0.0"
-source = "git+https://github.com/permissionlessweb/cw-minus?branch=main#47c2b4c18f6d9b7e1b607dc21ee29d7756dc6f06"
+source = "git+https://github.com/permissionlessweb/cw-minus?branch=main#3dcc39ed9c9199b08fff90b9e4a57b464ccc855f"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
@@ -542,7 +542,7 @@ dependencies = [
 [[package]]
 name = "cw-multi-test"
 version = "3.0.1"
-source = "git+https://github.com/permissionlessweb/cw-multi-test?branch=mvp#820892f44fa5beb43eb66be7a5441c18bc43c02d"
+source = "git+https://github.com/permissionlessweb/cw-multi-test?branch=mvp#81b4685faa61e8110d5dfd95acc9e4fa0bc9a423"
 dependencies = [
  "bech32",
  "cosmwasm-schema",
@@ -570,7 +570,7 @@ dependencies = [
 [[package]]
 name = "cw-placeholder"
 version = "2.2.0"
-source = "git+https://github.com/permissionlessweb/wynddex?branch=mvp#6e958f7d3d55a028939105eadfbe23db0e5f6bb9"
+source = "git+https://github.com/permissionlessweb/wynddex?branch=mvp#cbadc9d190eb1d6fdcd3c48ab7e6a5637bf70b52"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
@@ -634,7 +634,7 @@ dependencies = [
 [[package]]
 name = "cw-utils"
 version = "3.0.0"
-source = "git+https://github.com/permissionlessweb/cw-minus?branch=main#47c2b4c18f6d9b7e1b607dc21ee29d7756dc6f06"
+source = "git+https://github.com/permissionlessweb/cw-minus?branch=main#3dcc39ed9c9199b08fff90b9e4a57b464ccc855f"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
@@ -658,7 +658,7 @@ dependencies = [
 [[package]]
 name = "cw2"
 version = "3.0.0"
-source = "git+https://github.com/permissionlessweb/cw-minus?branch=main#47c2b4c18f6d9b7e1b607dc21ee29d7756dc6f06"
+source = "git+https://github.com/permissionlessweb/cw-minus?branch=main#3dcc39ed9c9199b08fff90b9e4a57b464ccc855f"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
@@ -923,9 +923,9 @@ dependencies = [
 
 [[package]]
 name = "fastrand"
-version = "2.4.0"
+version = "2.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a043dc74da1e37d6afe657061213aa6f425f855399a11d3463c6ecccc4dfda1f"
+checksum = "9f1f227452a390804cdb637b74a86990f2a7d7ba4b7d5693aac9b4dd6defd8d6"
 
 [[package]]
 name = "ff"
@@ -2249,7 +2249,7 @@ dependencies = [
 [[package]]
 name = "wynd-lsd-hub"
 version = "1.3.0"
-source = "git+https://github.com/permissionlessweb/wynd-lsd?branch=cw3#73d75fba343ade61f65326e4af35aa39dd200324"
+source = "git+https://github.com/permissionlessweb/wynd-lsd?branch=cw3#35fa88eaf1d553d3162634275605dad5bc940960"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
@@ -2285,7 +2285,7 @@ dependencies = [
 [[package]]
 name = "wyndex"
 version = "2.2.0"
-source = "git+https://github.com/permissionlessweb/wynddex?branch=mvp#6e958f7d3d55a028939105eadfbe23db0e5f6bb9"
+source = "git+https://github.com/permissionlessweb/wynddex?branch=mvp#cbadc9d190eb1d6fdcd3c48ab7e6a5637bf70b52"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
@@ -2328,7 +2328,7 @@ dependencies = [
 [[package]]
 name = "wyndex-factory"
 version = "2.2.0"
-source = "git+https://github.com/permissionlessweb/wynddex?branch=mvp#6e958f7d3d55a028939105eadfbe23db0e5f6bb9"
+source = "git+https://github.com/permissionlessweb/wynddex?branch=mvp#cbadc9d190eb1d6fdcd3c48ab7e6a5637bf70b52"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
@@ -2434,7 +2434,7 @@ dependencies = [
 [[package]]
 name = "wyndex-stake"
 version = "2.2.0"
-source = "git+https://github.com/permissionlessweb/wynddex?branch=mvp#6e958f7d3d55a028939105eadfbe23db0e5f6bb9"
+source = "git+https://github.com/permissionlessweb/wynddex?branch=mvp#cbadc9d190eb1d6fdcd3c48ab7e6a5637bf70b52"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
@@ -2459,7 +2459,7 @@ dependencies = [
 [[package]]
 name = "wyndex-test-helpers"
 version = "2.2.0"
-source = "git+https://github.com/permissionlessweb/wynddex?branch=mvp#6e958f7d3d55a028939105eadfbe23db0e5f6bb9"
+source = "git+https://github.com/permissionlessweb/wynddex?branch=mvp#cbadc9d190eb1d6fdcd3c48ab7e6a5637bf70b52"
 dependencies = [
  "cosmwasm-std",
 ]
