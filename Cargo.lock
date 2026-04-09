@@ -3,6 +3,29 @@
 version = 4
 
 [[package]]
+name = "abstract-cw-multi-test"
+version = "3.0.0-rc"
+source = "git+https://github.com/permissionlessweb/cw-multi-test-fork?branch=zk-mvp#2339e4cfbe5c7b5896b25bb10bc4decd3db98249"
+dependencies = [
+ "bech32",
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-storage-plus",
+ "cw-utils",
+ "cw20-ics20",
+ "hex",
+ "itertools 0.14.0",
+ "log",
+ "prost",
+ "schemars 0.8.22",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 1.0.69",
+ "tiny-keccak",
+]
+
+[[package]]
 name = "ahash"
 version = "0.8.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -353,45 +376,18 @@ checksum = "c2459377285ad874054d797f3ccebf984978aa39129f6eafde5cdc8315b612f8"
 [[package]]
 name = "cosmwasm-core"
 version = "3.0.3-dev"
-
-[[package]]
-name = "cosmwasm-core"
-version = "3.0.3-dev"
-source = "git+https://github.com/permissionlessweb/cosmwasm?branch=mvp#d5586deb95247416a6eaf312c8aa3e283e1d15ca"
+source = "git+https://github.com/permissionlessweb/cosmwasm?branch=zk-mvp#05dfc94748bb8b79866ee0a7fcea02df46d9be0a"
 
 [[package]]
 name = "cosmwasm-crypto"
 version = "3.0.3-dev"
+source = "git+https://github.com/permissionlessweb/cosmwasm?branch=zk-mvp#05dfc94748bb8b79866ee0a7fcea02df46d9be0a"
 dependencies = [
  "ark-bls12-381",
  "ark-ec",
  "ark-ff",
  "ark-serialize",
- "cosmwasm-core 3.0.3-dev",
- "curve25519-dalek",
- "digest",
- "ecdsa",
- "ed25519-zebra",
- "k256",
- "num-bigint",
- "num-traits",
- "p256",
- "rand_core 0.6.4",
- "rayon",
- "sha2",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "cosmwasm-crypto"
-version = "3.0.3-dev"
-source = "git+https://github.com/permissionlessweb/cosmwasm?branch=mvp#d5586deb95247416a6eaf312c8aa3e283e1d15ca"
-dependencies = [
- "ark-bls12-381",
- "ark-ec",
- "ark-ff",
- "ark-serialize",
- "cosmwasm-core 3.0.3-dev (git+https://github.com/permissionlessweb/cosmwasm?branch=mvp)",
+ "cosmwasm-core",
  "curve25519-dalek",
  "digest",
  "ecdsa",
@@ -409,16 +405,7 @@ dependencies = [
 [[package]]
 name = "cosmwasm-derive"
 version = "3.0.3-dev"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.117",
-]
-
-[[package]]
-name = "cosmwasm-derive"
-version = "3.0.3-dev"
-source = "git+https://github.com/permissionlessweb/cosmwasm?branch=mvp#d5586deb95247416a6eaf312c8aa3e283e1d15ca"
+source = "git+https://github.com/permissionlessweb/cosmwasm?branch=zk-mvp#05dfc94748bb8b79866ee0a7fcea02df46d9be0a"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -428,22 +415,10 @@ dependencies = [
 [[package]]
 name = "cosmwasm-schema"
 version = "3.0.3-dev"
+source = "git+https://github.com/permissionlessweb/cosmwasm?branch=zk-mvp#05dfc94748bb8b79866ee0a7fcea02df46d9be0a"
 dependencies = [
- "cosmwasm-schema-derive 3.0.3-dev",
- "cw-schema 3.0.3-dev",
- "schemars 0.8.22",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "cosmwasm-schema"
-version = "3.0.3-dev"
-source = "git+https://github.com/permissionlessweb/cosmwasm?branch=mvp#d5586deb95247416a6eaf312c8aa3e283e1d15ca"
-dependencies = [
- "cosmwasm-schema-derive 3.0.3-dev (git+https://github.com/permissionlessweb/cosmwasm?branch=mvp)",
- "cw-schema 3.0.3-dev (git+https://github.com/permissionlessweb/cosmwasm?branch=mvp)",
+ "cosmwasm-schema-derive",
+ "cw-schema",
  "schemars 0.8.22",
  "serde",
  "serde_json",
@@ -453,16 +428,7 @@ dependencies = [
 [[package]]
 name = "cosmwasm-schema-derive"
 version = "3.0.3-dev"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.117",
-]
-
-[[package]]
-name = "cosmwasm-schema-derive"
-version = "3.0.3-dev"
-source = "git+https://github.com/permissionlessweb/cosmwasm?branch=mvp#d5586deb95247416a6eaf312c8aa3e283e1d15ca"
+source = "git+https://github.com/permissionlessweb/cosmwasm?branch=zk-mvp#05dfc94748bb8b79866ee0a7fcea02df46d9be0a"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -472,38 +438,15 @@ dependencies = [
 [[package]]
 name = "cosmwasm-std"
 version = "3.0.3-dev"
+source = "git+https://github.com/permissionlessweb/cosmwasm?branch=zk-mvp#05dfc94748bb8b79866ee0a7fcea02df46d9be0a"
 dependencies = [
  "base64",
  "bech32",
  "bnum",
- "cosmwasm-core 3.0.3-dev",
- "cosmwasm-crypto 3.0.3-dev",
- "cosmwasm-derive 3.0.3-dev",
- "cw-schema 3.0.3-dev",
- "derive_more",
- "hex",
- "rand_core 0.6.4",
- "rmp-serde",
- "schemars 0.8.22",
- "serde",
- "serde_json",
- "sha2",
- "static_assertions",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "cosmwasm-std"
-version = "3.0.3-dev"
-source = "git+https://github.com/permissionlessweb/cosmwasm?branch=mvp#d5586deb95247416a6eaf312c8aa3e283e1d15ca"
-dependencies = [
- "base64",
- "bech32",
- "bnum",
- "cosmwasm-core 3.0.3-dev (git+https://github.com/permissionlessweb/cosmwasm?branch=mvp)",
- "cosmwasm-crypto 3.0.3-dev (git+https://github.com/permissionlessweb/cosmwasm?branch=mvp)",
- "cosmwasm-derive 3.0.3-dev (git+https://github.com/permissionlessweb/cosmwasm?branch=mvp)",
- "cw-schema 3.0.3-dev (git+https://github.com/permissionlessweb/cosmwasm?branch=mvp)",
+ "cosmwasm-core",
+ "cosmwasm-crypto",
+ "cosmwasm-derive",
+ "cw-schema",
  "derive_more",
  "hex",
  "rand_core 0.6.4",
@@ -608,88 +551,34 @@ dependencies = [
 [[package]]
 name = "cw-controllers"
 version = "3.0.0"
+source = "git+https://github.com/permissionlessweb/cw-minus?branch=zk-mvp#5a4cff1fe65e1de8c2f98e222b94ec04c4517831"
 dependencies = [
- "cosmwasm-schema 3.0.3-dev (git+https://github.com/permissionlessweb/cosmwasm?branch=mvp)",
- "cosmwasm-std 3.0.3-dev (git+https://github.com/permissionlessweb/cosmwasm?branch=mvp)",
- "cw-storage-plus 3.0.1 (git+https://github.com/permissionlessweb/cw-storage-plus?branch=mvp)",
- "cw-utils 3.0.0",
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-storage-plus",
+ "cw-utils",
  "schemars 0.8.22",
  "serde",
  "thiserror 2.0.18",
 ]
 
 [[package]]
-name = "cw-controllers"
-version = "3.0.0"
-source = "git+https://github.com/permissionlessweb/cw-minus?branch=main#54e7f82f24278a41f29e8f10aa5069ac775e9b99"
-dependencies = [
- "cosmwasm-schema 3.0.3-dev (git+https://github.com/permissionlessweb/cosmwasm?branch=mvp)",
- "cosmwasm-std 3.0.3-dev (git+https://github.com/permissionlessweb/cosmwasm?branch=mvp)",
- "cw-storage-plus 3.0.1 (git+https://github.com/permissionlessweb/cw-storage-plus?branch=mvp)",
- "cw-utils 3.0.0 (git+https://github.com/permissionlessweb/cw-minus?branch=main)",
- "schemars 0.8.22",
- "serde",
- "thiserror 2.0.18",
-]
-
-[[package]]
-name = "cw-multi-test"
-version = "3.0.1"
-dependencies = [
- "bech32",
- "cosmwasm-schema 3.0.3-dev (git+https://github.com/permissionlessweb/cosmwasm?branch=mvp)",
- "cosmwasm-std 3.0.3-dev (git+https://github.com/permissionlessweb/cosmwasm?branch=mvp)",
- "cw-storage-plus 3.0.1 (git+https://github.com/permissionlessweb/cw-storage-plus?branch=mvp)",
- "cw-utils 3.0.0 (git+https://github.com/permissionlessweb/cw-minus?branch=mvp)",
- "itertools 0.14.0",
- "prost",
- "schemars 0.8.22",
- "serde",
- "sha2",
-]
-
-[[package]]
 name = "cw-placeholder"
 version = "2.2.0"
 dependencies = [
- "cosmwasm-schema 3.0.3-dev",
- "cosmwasm-std 3.0.3-dev",
- "cw-storage-plus 3.0.1",
- "cw2 3.0.0",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "cw-placeholder"
-version = "2.2.0"
-source = "git+https://github.com/permissionlessweb/wynddex?branch=mvp#cbadc9d190eb1d6fdcd3c48ab7e6a5637bf70b52"
-dependencies = [
- "cosmwasm-schema 3.0.3-dev (git+https://github.com/permissionlessweb/cosmwasm?branch=mvp)",
- "cosmwasm-std 3.0.3-dev (git+https://github.com/permissionlessweb/cosmwasm?branch=mvp)",
- "cw-storage-plus 3.0.1 (git+https://github.com/permissionlessweb/cw-storage-plus?branch=mvp)",
- "cw2 3.0.0 (git+https://github.com/permissionlessweb/cw-minus?branch=main)",
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-storage-plus",
+ "cw2",
  "thiserror 1.0.69",
 ]
 
 [[package]]
 name = "cw-schema"
 version = "3.0.3-dev"
+source = "git+https://github.com/permissionlessweb/cosmwasm?branch=zk-mvp#05dfc94748bb8b79866ee0a7fcea02df46d9be0a"
 dependencies = [
- "cw-schema-derive 3.0.3-dev",
- "indexmap",
- "schemars 1.2.1",
- "serde",
- "serde_with",
- "siphasher",
- "typeid",
-]
-
-[[package]]
-name = "cw-schema"
-version = "3.0.3-dev"
-source = "git+https://github.com/permissionlessweb/cosmwasm?branch=mvp#d5586deb95247416a6eaf312c8aa3e283e1d15ca"
-dependencies = [
- "cw-schema-derive 3.0.3-dev (git+https://github.com/permissionlessweb/cosmwasm?branch=mvp)",
+ "cw-schema-derive",
  "indexmap",
  "schemars 1.2.1",
  "serde",
@@ -701,19 +590,7 @@ dependencies = [
 [[package]]
 name = "cw-schema-derive"
 version = "3.0.3-dev"
-dependencies = [
- "heck",
- "itertools 0.13.0",
- "owo-colors",
- "proc-macro2",
- "quote",
- "syn 2.0.117",
-]
-
-[[package]]
-name = "cw-schema-derive"
-version = "3.0.3-dev"
-source = "git+https://github.com/permissionlessweb/cosmwasm?branch=mvp#d5586deb95247416a6eaf312c8aa3e283e1d15ca"
+source = "git+https://github.com/permissionlessweb/cosmwasm?branch=zk-mvp#05dfc94748bb8b79866ee0a7fcea02df46d9be0a"
 dependencies = [
  "heck",
  "itertools 0.13.0",
@@ -727,32 +604,23 @@ dependencies = [
 name = "cw-splitter"
 version = "2.2.0"
 dependencies = [
- "cosmwasm-schema 3.0.3-dev",
- "cosmwasm-std 3.0.3-dev",
- "cw-multi-test",
- "cw-storage-plus 3.0.1",
- "cw-utils 3.0.0",
- "cw2 3.0.0",
- "cw20 3.0.0",
- "cw20-base 3.0.0",
+ "abstract-cw-multi-test",
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-storage-plus",
+ "cw-utils",
+ "cw2",
+ "cw20",
+ "cw20-base",
  "thiserror 1.0.69",
 ]
 
 [[package]]
 name = "cw-storage-plus"
 version = "3.0.1"
+source = "git+https://github.com/permissionlessweb/cw-storage-plus?branch=zk-mvp#d59ae5bf45b8876fb0b4c62bdfd942aa0e0306ff"
 dependencies = [
- "cosmwasm-std 3.0.3-dev (git+https://github.com/permissionlessweb/cosmwasm?branch=mvp)",
- "schemars 0.8.22",
- "serde",
-]
-
-[[package]]
-name = "cw-storage-plus"
-version = "3.0.1"
-source = "git+https://github.com/permissionlessweb/cw-storage-plus?branch=mvp#9cc69e11726116f5d709fde94e05100a0e592fa7"
-dependencies = [
- "cosmwasm-std 3.0.3-dev (git+https://github.com/permissionlessweb/cosmwasm?branch=mvp)",
+ "cosmwasm-std",
  "schemars 0.8.22",
  "serde",
 ]
@@ -760,33 +628,10 @@ dependencies = [
 [[package]]
 name = "cw-utils"
 version = "3.0.0"
+source = "git+https://github.com/permissionlessweb/cw-minus?branch=zk-mvp#5a4cff1fe65e1de8c2f98e222b94ec04c4517831"
 dependencies = [
- "cosmwasm-schema 3.0.3-dev (git+https://github.com/permissionlessweb/cosmwasm?branch=mvp)",
- "cosmwasm-std 3.0.3-dev (git+https://github.com/permissionlessweb/cosmwasm?branch=mvp)",
- "schemars 0.8.22",
- "serde",
- "thiserror 2.0.18",
-]
-
-[[package]]
-name = "cw-utils"
-version = "3.0.0"
-source = "git+https://github.com/permissionlessweb/cw-minus?branch=main#54e7f82f24278a41f29e8f10aa5069ac775e9b99"
-dependencies = [
- "cosmwasm-schema 3.0.3-dev (git+https://github.com/permissionlessweb/cosmwasm?branch=mvp)",
- "cosmwasm-std 3.0.3-dev (git+https://github.com/permissionlessweb/cosmwasm?branch=mvp)",
- "schemars 0.8.22",
- "serde",
- "thiserror 2.0.18",
-]
-
-[[package]]
-name = "cw-utils"
-version = "3.0.0"
-source = "git+https://github.com/permissionlessweb/cw-minus?branch=mvp#afd7e90a4d4ede7b4c00f382b6790cb33e4f2c75"
-dependencies = [
- "cosmwasm-schema 3.0.3-dev (git+https://github.com/permissionlessweb/cosmwasm?branch=mvp)",
- "cosmwasm-std 3.0.3-dev (git+https://github.com/permissionlessweb/cosmwasm?branch=mvp)",
+ "cosmwasm-schema",
+ "cosmwasm-std",
  "schemars 0.8.22",
  "serde",
  "thiserror 2.0.18",
@@ -795,24 +640,11 @@ dependencies = [
 [[package]]
 name = "cw2"
 version = "3.0.0"
+source = "git+https://github.com/permissionlessweb/cw-minus?branch=zk-mvp#5a4cff1fe65e1de8c2f98e222b94ec04c4517831"
 dependencies = [
- "cosmwasm-schema 3.0.3-dev (git+https://github.com/permissionlessweb/cosmwasm?branch=mvp)",
- "cosmwasm-std 3.0.3-dev (git+https://github.com/permissionlessweb/cosmwasm?branch=mvp)",
- "cw-storage-plus 3.0.1 (git+https://github.com/permissionlessweb/cw-storage-plus?branch=mvp)",
- "schemars 0.8.22",
- "semver",
- "serde",
- "thiserror 2.0.18",
-]
-
-[[package]]
-name = "cw2"
-version = "3.0.0"
-source = "git+https://github.com/permissionlessweb/cw-minus?branch=main#54e7f82f24278a41f29e8f10aa5069ac775e9b99"
-dependencies = [
- "cosmwasm-schema 3.0.3-dev (git+https://github.com/permissionlessweb/cosmwasm?branch=mvp)",
- "cosmwasm-std 3.0.3-dev (git+https://github.com/permissionlessweb/cosmwasm?branch=mvp)",
- "cw-storage-plus 3.0.1 (git+https://github.com/permissionlessweb/cw-storage-plus?branch=mvp)",
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-storage-plus",
  "schemars 0.8.22",
  "semver",
  "serde",
@@ -822,22 +654,11 @@ dependencies = [
 [[package]]
 name = "cw20"
 version = "3.0.0"
+source = "git+https://github.com/permissionlessweb/cw-plus?branch=zk-mvp#0c11f44be04d839777035cd8db66029cde603c0d"
 dependencies = [
- "cosmwasm-schema 3.0.3-dev",
- "cosmwasm-std 3.0.3-dev",
- "cw-utils 3.0.0",
- "schemars 0.8.22",
- "serde",
-]
-
-[[package]]
-name = "cw20"
-version = "3.0.0"
-source = "git+https://github.com/permissionlessweb/cw-plus?branch=main#27c27971a07ee5482c01afa1de3a4e03206e963f"
-dependencies = [
- "cosmwasm-schema 3.0.3-dev (git+https://github.com/permissionlessweb/cosmwasm?branch=mvp)",
- "cosmwasm-std 3.0.3-dev (git+https://github.com/permissionlessweb/cosmwasm?branch=mvp)",
- "cw-utils 3.0.0 (git+https://github.com/permissionlessweb/cw-minus?branch=main)",
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-utils",
  "schemars 0.8.22",
  "serde",
 ]
@@ -845,12 +666,13 @@ dependencies = [
 [[package]]
 name = "cw20-base"
 version = "3.0.0"
+source = "git+https://github.com/permissionlessweb/cw-plus?branch=zk-mvp#0c11f44be04d839777035cd8db66029cde603c0d"
 dependencies = [
- "cosmwasm-schema 3.0.3-dev",
- "cosmwasm-std 3.0.3-dev",
- "cw-storage-plus 3.0.1",
- "cw2 3.0.0",
- "cw20 3.0.0 (git+https://github.com/permissionlessweb/cw-plus?branch=main)",
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-storage-plus",
+ "cw2",
+ "cw20",
  "schemars 0.8.22",
  "semver",
  "serde",
@@ -858,15 +680,17 @@ dependencies = [
 ]
 
 [[package]]
-name = "cw20-base"
+name = "cw20-ics20"
 version = "3.0.0"
-source = "git+https://github.com/permissionlessweb/cw-plus?branch=main#27c27971a07ee5482c01afa1de3a4e03206e963f"
+source = "git+https://github.com/permissionlessweb/cw-plus?branch=zk-mvp#0c11f44be04d839777035cd8db66029cde603c0d"
 dependencies = [
- "cosmwasm-schema 3.0.3-dev (git+https://github.com/permissionlessweb/cosmwasm?branch=mvp)",
- "cosmwasm-std 3.0.3-dev (git+https://github.com/permissionlessweb/cosmwasm?branch=mvp)",
- "cw-storage-plus 3.0.1 (git+https://github.com/permissionlessweb/cw-storage-plus?branch=mvp)",
- "cw2 3.0.0 (git+https://github.com/permissionlessweb/cw-minus?branch=main)",
- "cw20 3.0.0 (git+https://github.com/permissionlessweb/cw-plus?branch=main)",
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-controllers",
+ "cw-storage-plus",
+ "cw-utils",
+ "cw2",
+ "cw20",
  "schemars 0.8.22",
  "semver",
  "serde",
@@ -1135,21 +959,21 @@ checksum = "d9c4f5dac5e15c24eb999c26181a6ca40b39fe946cbe4c263c7209467bc83af2"
 name = "gauge-adapter"
 version = "2.2.0"
 dependencies = [
+ "abstract-cw-multi-test",
  "anyhow",
- "cosmwasm-schema 3.0.3-dev",
- "cosmwasm-std 3.0.3-dev",
- "cw-multi-test",
- "cw-placeholder 2.2.0",
- "cw-storage-plus 3.0.1",
- "cw2 3.0.0",
- "cw20 3.0.0",
- "cw20-base 3.0.0",
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-placeholder",
+ "cw-storage-plus",
+ "cw2",
+ "cw20",
+ "cw20-base",
  "thiserror 1.0.69",
- "wyndex 2.2.0",
- "wyndex-factory 2.2.0",
+ "wyndex",
+ "wyndex-factory",
  "wyndex-pair",
  "wyndex-pair-lsd",
- "wyndex-stake 2.2.0",
+ "wyndex-stake",
 ]
 
 [[package]]
@@ -1384,20 +1208,20 @@ checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
 name = "lp-converter"
 version = "2.2.0"
 dependencies = [
+ "abstract-cw-multi-test",
  "anyhow",
- "cosmwasm-schema 3.0.3-dev",
- "cosmwasm-std 3.0.3-dev",
- "cw-multi-test",
- "cw-storage-plus 3.0.1",
- "cw2 3.0.0",
- "cw20 3.0.0",
- "cw20-base 3.0.0",
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-storage-plus",
+ "cw2",
+ "cw20",
+ "cw20-base",
  "thiserror 1.0.69",
  "wynd-lsd-hub",
- "wyndex 2.2.0",
- "wyndex-factory 2.2.0",
+ "wyndex",
+ "wyndex-factory",
  "wyndex-pair",
- "wyndex-stake 2.2.0",
+ "wyndex-stake",
 ]
 
 [[package]]
@@ -1410,22 +1234,22 @@ checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
 name = "nominated-trader"
 version = "2.2.0"
 dependencies = [
+ "abstract-cw-multi-test",
  "anyhow",
- "cosmwasm-schema 3.0.3-dev",
- "cosmwasm-std 3.0.3-dev",
- "cw-multi-test",
- "cw-storage-plus 3.0.1",
- "cw-utils 3.0.0",
- "cw2 3.0.0",
- "cw20 3.0.0",
- "cw20-base 3.0.0",
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-storage-plus",
+ "cw-utils",
+ "cw2",
+ "cw20",
+ "cw20-base",
  "thiserror 1.0.69",
- "wyndex 2.2.0",
- "wyndex-factory 2.2.0",
+ "wyndex",
+ "wyndex-factory",
  "wyndex-multi-hop",
  "wyndex-pair",
  "wyndex-pair-lsd",
- "wyndex-stake 2.2.0",
+ "wyndex-stake",
 ]
 
 [[package]]
@@ -2199,6 +2023,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "tiny-keccak"
+version = "2.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2c9d3793400a45f954c52e73d068316d76b6f4e36977e3fcebb13a2721e80237"
+dependencies = [
+ "crunchy",
+]
+
+[[package]]
 name = "typeid"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2425,16 +2258,16 @@ dependencies = [
 [[package]]
 name = "wynd-lsd-hub"
 version = "1.3.0"
-source = "git+https://github.com/permissionlessweb/wynd-lsd?branch=cw3#35fa88eaf1d553d3162634275605dad5bc940960"
+source = "git+https://github.com/permissionlessweb/wynd-lsd?branch=zk-mvp#2128565bcf92680465ea585e8b6f826427c685c0"
 dependencies = [
- "cosmwasm-schema 3.0.3-dev (git+https://github.com/permissionlessweb/cosmwasm?branch=mvp)",
- "cosmwasm-std 3.0.3-dev (git+https://github.com/permissionlessweb/cosmwasm?branch=mvp)",
- "cw-controllers 3.0.0 (git+https://github.com/permissionlessweb/cw-minus?branch=main)",
- "cw-storage-plus 3.0.1 (git+https://github.com/permissionlessweb/cw-storage-plus?branch=mvp)",
- "cw-utils 3.0.0 (git+https://github.com/permissionlessweb/cw-minus?branch=main)",
- "cw2 3.0.0 (git+https://github.com/permissionlessweb/cw-minus?branch=main)",
- "cw20 3.0.0 (git+https://github.com/permissionlessweb/cw-plus?branch=main)",
- "cw20-base 3.0.0 (git+https://github.com/permissionlessweb/cw-plus?branch=main)",
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-controllers",
+ "cw-storage-plus",
+ "cw-utils",
+ "cw2",
+ "cw20",
+ "cw20-base",
  "semver",
  "thiserror 1.0.69",
 ]
@@ -2443,201 +2276,135 @@ dependencies = [
 name = "wyndex"
 version = "2.2.0"
 dependencies = [
- "cosmwasm-schema 3.0.3-dev",
- "cosmwasm-std 3.0.3-dev",
- "cw-storage-plus 3.0.1",
- "cw-utils 3.0.0",
- "cw20 3.0.0",
- "cw20-base 3.0.0",
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-storage-plus",
+ "cw-utils",
+ "cw20",
+ "cw20-base",
  "itertools 0.10.5",
  "schemars 0.8.22",
  "serde",
  "test-case 3.3.1",
  "thiserror 1.0.69",
  "uint",
- "wyndex-test-helpers 2.2.0",
-]
-
-[[package]]
-name = "wyndex"
-version = "2.2.0"
-source = "git+https://github.com/permissionlessweb/wynddex?branch=mvp#cbadc9d190eb1d6fdcd3c48ab7e6a5637bf70b52"
-dependencies = [
- "cosmwasm-schema 3.0.3-dev (git+https://github.com/permissionlessweb/cosmwasm?branch=mvp)",
- "cosmwasm-std 3.0.3-dev (git+https://github.com/permissionlessweb/cosmwasm?branch=mvp)",
- "cw-storage-plus 3.0.1 (git+https://github.com/permissionlessweb/cw-storage-plus?branch=mvp)",
- "cw-utils 3.0.0 (git+https://github.com/permissionlessweb/cw-minus?branch=main)",
- "cw20 3.0.0 (git+https://github.com/permissionlessweb/cw-plus?branch=main)",
- "cw20-base 3.0.0 (git+https://github.com/permissionlessweb/cw-plus?branch=main)",
- "itertools 0.10.5",
- "schemars 0.8.22",
- "serde",
- "test-case 3.3.1",
- "thiserror 1.0.69",
- "uint",
- "wyndex-test-helpers 2.2.0 (git+https://github.com/permissionlessweb/wynddex?branch=mvp)",
+ "wyndex-test-helpers",
 ]
 
 [[package]]
 name = "wyndex-factory"
 version = "2.2.0"
 dependencies = [
+ "abstract-cw-multi-test",
  "anyhow",
- "cosmwasm-schema 3.0.3-dev",
- "cosmwasm-std 3.0.3-dev",
- "cw-multi-test",
- "cw-placeholder 2.2.0",
- "cw-storage-plus 3.0.1",
- "cw-utils 3.0.0",
- "cw2 3.0.0",
- "cw20 3.0.0",
- "cw20-base 3.0.0",
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-placeholder",
+ "cw-storage-plus",
+ "cw-utils",
+ "cw2",
+ "cw20",
+ "cw20-base",
  "itertools 0.10.5",
  "thiserror 1.0.69",
- "wyndex 2.2.0",
- "wyndex-factory 2.2.0 (git+https://github.com/permissionlessweb/wynddex?branch=mvp)",
+ "wyndex",
+ "wyndex-factory",
  "wyndex-pair",
- "wyndex-stake 2.2.0",
- "wyndex-test-helpers 2.2.0",
-]
-
-[[package]]
-name = "wyndex-factory"
-version = "2.2.0"
-source = "git+https://github.com/permissionlessweb/wynddex?branch=mvp#cbadc9d190eb1d6fdcd3c48ab7e6a5637bf70b52"
-dependencies = [
- "cosmwasm-schema 3.0.3-dev (git+https://github.com/permissionlessweb/cosmwasm?branch=mvp)",
- "cosmwasm-std 3.0.3-dev (git+https://github.com/permissionlessweb/cosmwasm?branch=mvp)",
- "cw-placeholder 2.2.0 (git+https://github.com/permissionlessweb/wynddex?branch=mvp)",
- "cw-storage-plus 3.0.1 (git+https://github.com/permissionlessweb/cw-storage-plus?branch=mvp)",
- "cw-utils 3.0.0 (git+https://github.com/permissionlessweb/cw-minus?branch=main)",
- "cw2 3.0.0 (git+https://github.com/permissionlessweb/cw-minus?branch=main)",
- "cw20 3.0.0 (git+https://github.com/permissionlessweb/cw-plus?branch=main)",
- "itertools 0.10.5",
- "thiserror 1.0.69",
- "wyndex 2.2.0 (git+https://github.com/permissionlessweb/wynddex?branch=mvp)",
- "wyndex-stake 2.2.0 (git+https://github.com/permissionlessweb/wynddex?branch=mvp)",
- "wyndex-test-helpers 2.2.0 (git+https://github.com/permissionlessweb/wynddex?branch=mvp)",
+ "wyndex-stake",
+ "wyndex-test-helpers",
 ]
 
 [[package]]
 name = "wyndex-multi-hop"
 version = "2.2.0"
 dependencies = [
+ "abstract-cw-multi-test",
  "anyhow",
- "cosmwasm-schema 3.0.3-dev",
- "cosmwasm-std 3.0.3-dev",
- "cw-multi-test",
- "cw-storage-plus 3.0.1",
- "cw-utils 3.0.0",
- "cw2 3.0.0",
- "cw20 3.0.0",
- "cw20-base 3.0.0",
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-storage-plus",
+ "cw-utils",
+ "cw2",
+ "cw20",
+ "cw20-base",
  "thiserror 1.0.69",
- "wyndex 2.2.0",
- "wyndex-factory 2.2.0",
+ "wyndex",
+ "wyndex-factory",
  "wyndex-pair",
- "wyndex-stake 2.2.0",
- "wyndex-test-helpers 2.2.0",
+ "wyndex-stake",
+ "wyndex-test-helpers",
 ]
 
 [[package]]
 name = "wyndex-pair"
 version = "2.2.0"
 dependencies = [
- "cosmwasm-schema 3.0.3-dev",
- "cosmwasm-std 3.0.3-dev",
- "cw-multi-test",
- "cw-storage-plus 3.0.1",
- "cw-utils 3.0.0",
- "cw2 3.0.0",
- "cw20 3.0.0",
- "cw20-base 3.0.0",
+ "abstract-cw-multi-test",
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-storage-plus",
+ "cw-utils",
+ "cw2",
+ "cw20",
+ "cw20-base",
  "proptest",
- "wyndex 2.2.0",
- "wyndex-factory 2.2.0",
- "wyndex-stake 2.2.0",
- "wyndex-test-helpers 2.2.0",
+ "wyndex",
+ "wyndex-factory",
+ "wyndex-stake",
+ "wyndex-test-helpers",
 ]
 
 [[package]]
 name = "wyndex-pair-lsd"
 version = "2.2.0"
 dependencies = [
+ "abstract-cw-multi-test",
  "anyhow",
- "cosmwasm-schema 3.0.3-dev",
- "cosmwasm-std 3.0.3-dev",
- "cw-multi-test",
- "cw-storage-plus 3.0.1",
- "cw-utils 3.0.0",
- "cw2 3.0.0",
- "cw20 3.0.0",
- "cw20-base 3.0.0",
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-storage-plus",
+ "cw-utils",
+ "cw2",
+ "cw20",
+ "cw20-base",
  "derivative",
  "itertools 0.10.5",
  "proptest",
- "wyndex 2.2.0",
- "wyndex-factory 2.2.0",
+ "wyndex",
+ "wyndex-factory",
  "wyndex-pair",
- "wyndex-stake 2.2.0",
- "wyndex-test-helpers 2.2.0",
+ "wyndex-stake",
+ "wyndex-test-helpers",
 ]
 
 [[package]]
 name = "wyndex-stake"
 version = "2.2.0"
 dependencies = [
+ "abstract-cw-multi-test",
  "anyhow",
- "cosmwasm-schema 3.0.3-dev",
- "cosmwasm-std 3.0.3-dev",
- "cw-controllers 3.0.0",
- "cw-multi-test",
- "cw-storage-plus 3.0.1",
- "cw-utils 3.0.0",
- "cw2 3.0.0",
- "cw20 3.0.0",
- "cw20-base 3.0.0",
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-controllers",
+ "cw-storage-plus",
+ "cw-utils",
+ "cw2",
+ "cw20",
+ "cw20-base",
  "lp-converter",
  "serde",
  "test-case 2.2.2",
  "thiserror 1.0.69",
- "wyndex 2.2.0",
- "wyndex 2.2.0 (git+https://github.com/permissionlessweb/wynddex?branch=mvp)",
- "wyndex-stake 2.2.0 (git+https://github.com/permissionlessweb/wynddex?branch=mvp)",
- "wyndex-test-helpers 2.2.0",
-]
-
-[[package]]
-name = "wyndex-stake"
-version = "2.2.0"
-source = "git+https://github.com/permissionlessweb/wynddex?branch=mvp#cbadc9d190eb1d6fdcd3c48ab7e6a5637bf70b52"
-dependencies = [
- "cosmwasm-schema 3.0.3-dev (git+https://github.com/permissionlessweb/cosmwasm?branch=mvp)",
- "cosmwasm-std 3.0.3-dev (git+https://github.com/permissionlessweb/cosmwasm?branch=mvp)",
- "cw-controllers 3.0.0 (git+https://github.com/permissionlessweb/cw-minus?branch=main)",
- "cw-storage-plus 3.0.1 (git+https://github.com/permissionlessweb/cw-storage-plus?branch=mvp)",
- "cw-utils 3.0.0 (git+https://github.com/permissionlessweb/cw-minus?branch=main)",
- "cw2 3.0.0 (git+https://github.com/permissionlessweb/cw-minus?branch=main)",
- "cw20 3.0.0 (git+https://github.com/permissionlessweb/cw-plus?branch=main)",
- "serde",
- "thiserror 1.0.69",
- "wyndex 2.2.0 (git+https://github.com/permissionlessweb/wynddex?branch=mvp)",
- "wyndex-test-helpers 2.2.0 (git+https://github.com/permissionlessweb/wynddex?branch=mvp)",
+ "wyndex",
+ "wyndex-stake",
+ "wyndex-test-helpers",
 ]
 
 [[package]]
 name = "wyndex-test-helpers"
 version = "2.2.0"
 dependencies = [
- "cosmwasm-std 3.0.3-dev",
-]
-
-[[package]]
-name = "wyndex-test-helpers"
-version = "2.2.0"
-source = "git+https://github.com/permissionlessweb/wynddex?branch=mvp#cbadc9d190eb1d6fdcd3c48ab7e6a5637bf70b52"
-dependencies = [
- "cosmwasm-std 3.0.3-dev (git+https://github.com/permissionlessweb/cosmwasm?branch=mvp)",
+ "cosmwasm-std",
 ]
 
 [[package]]
