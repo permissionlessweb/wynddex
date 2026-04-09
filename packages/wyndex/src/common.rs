@@ -34,18 +34,18 @@ pub fn propose_new_owner(
 ) -> StdResult<Response> {
     // Permission check
     if info.sender != owner {
-        return Err(StdError::generic_err("Unauthorized"));
+        return Err(StdError::msg("Unauthorized"));
     }
 
     let new_owner = deps.api.addr_validate(new_owner.as_str())?;
 
     // Check that the new owner is not the same as the current one
     if new_owner == owner {
-        return Err(StdError::generic_err("New owner cannot be same"));
+        return Err(StdError::msg("New owner cannot be same"));
     }
 
     if MAX_PROPOSAL_TTL < expires_in {
-        return Err(StdError::generic_err(format!(
+        return Err(StdError::msg(format!(
             "Parameter expires_in cannot be higher than {}",
             MAX_PROPOSAL_TTL
         )));
@@ -78,7 +78,7 @@ pub fn drop_ownership_proposal(
 ) -> StdResult<Response> {
     // Permission check
     if info.sender != owner {
-        return Err(StdError::generic_err("Unauthorized"));
+        return Err(StdError::msg("Unauthorized"));
     }
 
     proposal.remove(deps.storage);
@@ -101,15 +101,15 @@ pub fn claim_ownership(
 ) -> StdResult<Response> {
     let p = proposal
         .load(deps.storage)
-        .map_err(|_| StdError::generic_err("Ownership proposal not found"))?;
+        .map_err(|_| StdError::msg("Ownership proposal not found"))?;
 
     // Check the sender
     if info.sender != p.owner {
-        return Err(StdError::generic_err("Unauthorized"));
+        return Err(StdError::msg("Unauthorized"));
     }
 
     if env.block.time.seconds() > p.ttl {
-        return Err(StdError::generic_err("Ownership proposal expired"));
+        return Err(StdError::msg("Ownership proposal expired"));
     }
 
     proposal.remove(deps.storage);

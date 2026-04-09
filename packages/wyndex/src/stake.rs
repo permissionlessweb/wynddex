@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::Uint128;
+use cosmwasm_std::Uint256;
 
 /// Unbonding period in seconds
 pub type UnbondingPeriod = u64;
@@ -8,8 +8,8 @@ pub type UnbondingPeriod = u64;
 pub struct InstantiateMsg {
     /// address of cw20 contract token
     pub cw20_contract: String,
-    pub tokens_per_power: Uint128,
-    pub min_bond: Uint128,
+    pub tokens_per_power: Uint256,
+    pub min_bond: Uint256,
     pub unbonding_periods: Vec<UnbondingPeriod>,
     /// the maximum number of distributions that can be created
     pub max_distributions: u32,
@@ -46,7 +46,7 @@ pub enum ReceiveMsg {
     MassDelegate {
         /// Unbonding period in seconds
         unbonding_period: u64,
-        delegate_to: Vec<(String, Uint128)>,
+        delegate_to: Vec<(String, Uint256)>,
     },
     /// Fund a distribution flow with cw20 tokens and update the Reward Config for that cw20 asset.
     Fund { funding_info: FundingInfo },
@@ -59,5 +59,5 @@ pub struct FundingInfo {
     /// Duration of distribution in seconds.
     pub distribution_duration: u64,
     /// Amount to distribute.
-    pub amount: Uint128,
+    pub amount: Uint256,
 }

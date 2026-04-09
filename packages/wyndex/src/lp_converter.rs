@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::Uint128;
+use cosmwasm_std::Uint256;
 
 #[cw_serde]
 pub enum ExecuteMsg {
@@ -9,7 +9,7 @@ pub enum ExecuteMsg {
         /// The staking contract will put the sender of the `MigrateStake` message here.
         sender: String,
         /// How many LP tokens were freed by the staking contract
-        amount: Uint128,
+        amount: Uint256,
         /// The unbonding period to stake the target LP tokens to
         unbonding_period: u64,
         /// Address of the pair contract whose LP tokens should be converted

@@ -1,6 +1,7 @@
 use std::str::FromStr;
 
-use cosmwasm_std::{assert_approx_eq, coin, Addr, Decimal, Fraction, Uint128};
+use cosmwasm_std::testing::MockApi;
+use cosmwasm_std::{assert_approx_eq, coin, Addr, Decimal, Decimal256, Fraction, Uint128, Uint256};
 use cw_multi_test::{BankSudo, SudoMsg};
 use wyndex::pair::LsdInfo;
 use wyndex::{
@@ -17,12 +18,15 @@ const DAY: u64 = 24 * 60 * 60;
 fn basic_provide_and_swap() {
     let target_rate = Decimal::from_str("1.5").unwrap();
     let mut suite = SuiteBuilder::new()
-        .with_funds("sender", &[coin(150_0000000000, "juno")])
+        .with_funds(
+            &MockApi::default().addr_make("sender"),
+            &[coin(150_0000000000, "juno")],
+        )
         .with_initial_target_rate(target_rate)
         .build();
 
     let juno_info = AssetInfo::Native("juno".to_string());
-    let wy_juno = suite.instantiate_token("owner", "wyJUNO");
+    let wy_juno = suite.instantiate_token(&MockApi::default().addr_make("owner"), "wyJUNO");
     let wy_juno_info = AssetInfo::Token(wy_juno.to_string());
 
     let pair = suite
@@ -30,7 +34,7 @@ fn basic_provide_and_swap() {
             PairType::Lsd {},
             Some(StablePoolParams {
                 amp: 45,
-                owner: Some("owner".to_string()),
+                owner: Some(MockApi::default().addr_make("owner").to_string()),
                 lsd: Some(LsdInfo {
                     asset: wy_juno_info.clone(),
                     hub: suite.mock_hub.to_string(),
@@ -47,36 +51,36 @@ fn basic_provide_and_swap() {
     let spot = suite
         .query_spot_price(&pair, &wy_juno_info, &juno_info)
         .unwrap();
-    assert_eq!(spot, Decimal::percent(150));
+    assert_eq!(spot, Decimal256::percent(150));
 
     // check spot price is 1 JUNO -> 0.666666 wyJUNO
     let spot = suite
         .query_spot_price(&pair, &juno_info, &wy_juno_info)
         .unwrap();
-    assert_eq!(spot, Decimal::from_ratio(666_667u128, 1_000_000u128));
+    assert_eq!(spot, Decimal256::from_ratio(666_667u128, 1_000_000u128));
 
     let sim = suite
         .query_simulation(&pair, wy_juno_info.with_balance(10u128), None)
         .unwrap();
-    assert_eq!(sim.return_amount.u128(), 15);
-    assert_eq!(sim.spread_amount.u128(), 0);
+    assert_eq!(Uint128::try_from(sim.return_amount).unwrap().u128(), 15);
+    assert_eq!(Uint128::try_from(sim.spread_amount).unwrap().u128(), 0);
 
     let sim = suite
         .query_simulation(&pair, juno_info.with_balance(150u128), None)
         .unwrap();
-    assert_eq!(sim.return_amount.u128(), 100);
-    assert_eq!(sim.spread_amount.u128(), 0);
+    assert_eq!(Uint128::try_from(sim.return_amount).unwrap().u128(), 100);
+    assert_eq!(Uint128::try_from(sim.spread_amount).unwrap().u128(), 0);
 
     let sim = suite
         .query_simulation(&pair, juno_info.with_balance(150_000u128), None)
         .unwrap();
-    assert_eq!(sim.spread_amount.u128(), 0);
+    assert_eq!(Uint128::try_from(sim.spread_amount).unwrap().u128(), 0);
 
     // do an actual swap
     suite
         .swap(
             &pair,
-            "sender",
+            &MockApi::default().addr_make("sender"),
             juno_info.with_balance(150_000u128),
             wy_juno_info,
             None,
@@ -86,8 +90,10 @@ fn basic_provide_and_swap() {
         .unwrap();
 
     assert_eq!(
-        suite.query_cw20_balance("sender", &wy_juno).unwrap(),
-        100_000u128
+        suite
+            .query_cw20_balance(&MockApi::default().addr_make("sender"), &wy_juno)
+            .unwrap(),
+        Uint256::new(100_000u128)
     );
 }
 
@@ -95,12 +101,15 @@ fn basic_provide_and_swap() {
 fn simple_provide_liquidity() {
     let target_rate = Decimal::from_str("1.5").unwrap();
     let mut suite = SuiteBuilder::new()
-        .with_funds("sender", &[coin(150_0000000000, "juno")])
+        .with_funds(
+            &&MockApi::default().addr_make("sender"),
+            &[coin(150_0000000000, "juno")],
+        )
         .with_initial_target_rate(target_rate)
         .build();
 
     let juno_info = AssetInfo::Native("juno".to_string());
-    let wy_juno = suite.instantiate_token("owner", "wyJUNO");
+    let wy_juno = suite.instantiate_token(&MockApi::default().addr_make("owner"), "wyJUNO");
     let wy_juno_info = AssetInfo::Token(wy_juno.to_string());
 
     let pair = suite
@@ -108,7 +117,7 @@ fn simple_provide_liquidity() {
             PairType::Lsd {},
             Some(StablePoolParams {
                 amp: 45,
-                owner: Some("owner".to_string()),
+                owner: Some(MockApi::default().addr_make("owner").to_string()),
                 lsd: Some(LsdInfo {
                     asset: wy_juno_info.clone(),
                     hub: suite.mock_hub.to_string(),
@@ -123,28 +132,41 @@ fn simple_provide_liquidity() {
 
     let pair_info = suite.query_pair(&pair).unwrap();
     let lp_amount = suite
-        .query_cw20_balance("whale", &pair_info.liquidity_token)
+        .query_cw20_balance(
+            &MockApi::default().addr_make("whale"),
+            &pair_info.liquidity_token,
+        )
         .unwrap();
 
     // withdraw all liquidity
     suite
         .withdraw_liquidity(
-            "whale",
+            &MockApi::default().addr_make("whale"),
             &pair,
             &pair_info.liquidity_token,
-            lp_amount,
+            Uint128::try_from(lp_amount).unwrap().u128(),
             vec![],
         )
         .unwrap();
 
     assert_approx_eq!(
-        suite.query_balance("whale", "juno").unwrap(),
-        150_000_000_000_000_000,
+        Uint128::try_from(
+            suite
+                .query_balance(&MockApi::default().addr_make("whale"), "juno")
+                .unwrap()
+        )
+        .unwrap(),
+        Uint128::new(150_000_000_000_000_000),
         "0.00000000000001"
     );
     assert_approx_eq!(
-        suite.query_cw20_balance("whale", &wy_juno).unwrap(),
-        100_000_000_000_000_000,
+        Uint128::try_from(
+            suite
+                .query_cw20_balance(&MockApi::default().addr_make("whale"), &wy_juno)
+                .unwrap()
+        )
+        .unwrap(),
+        Uint128::new(100_000_000_000_000_000),
         "0.00000000000001"
     );
 }
@@ -152,30 +174,45 @@ fn simple_provide_liquidity() {
 #[test]
 fn provide_liquidity_multiple() {
     let providers = [
-        ("provider1", Decimal::percent(50)),
-        ("provider2", Decimal::percent(25)),
-        ("provider3", Decimal::percent(15)),
-        ("provider4", Decimal::percent(10)),
+        (
+            &MockApi::default().addr_make("provider1"),
+            Decimal::percent(50),
+        ),
+        (
+            &MockApi::default().addr_make("provider2"),
+            Decimal::percent(25),
+        ),
+        (
+            &MockApi::default().addr_make("provider3"),
+            Decimal::percent(15),
+        ),
+        (
+            &MockApi::default().addr_make("provider4"),
+            Decimal::percent(10),
+        ),
     ];
     let total_lsd = Uint128::from(1_000_000_000_000_000u128);
 
     let target_rate = Decimal::from_str("1.5").unwrap();
     let mut suite = SuiteBuilder::new()
-        .with_funds("sender", &[coin(150_0000000000, "juno")])
+        .with_funds(
+            &MockApi::default().addr_make("sender"),
+            &[coin(150_0000000000, "juno")],
+        )
         .with_initial_target_rate(target_rate)
         .build();
 
     let juno_info = AssetInfo::Native("juno".to_string());
-    let wy_juno = suite.instantiate_token("owner", "wyJUNO");
+    let wy_juno = suite.instantiate_token(&MockApi::default().addr_make("owner"), "wyJUNO");
     let wy_juno_info = AssetInfo::Token(wy_juno.to_string());
 
     let pair = suite
         .create_pair(
-            "owner",
+            &MockApi::default().addr_make("owner"),
             PairType::Lsd {},
             Some(StablePoolParams {
                 amp: 45,
-                owner: Some("owner".to_string()),
+                owner: Some(MockApi::default().addr_make("owner").to_string()),
                 lsd: Some(LsdInfo {
                     asset: wy_juno_info.clone(),
                     hub: suite.mock_hub.to_string(),
@@ -194,7 +231,12 @@ fn provide_liquidity_multiple() {
 
         // mint wyJUNO tokens and increase allowance for LP contract
         suite
-            .mint_cw20("owner", &wy_juno, wy_juno_amt.u128(), provider)
+            .mint_cw20(
+                &MockApi::default().addr_make("owner"),
+                &wy_juno,
+                wy_juno_amt.u128(),
+                provider,
+            )
             .unwrap();
         suite
             .increase_allowance(provider, &wy_juno, pair.as_str(), wy_juno_amt.u128())
@@ -205,6 +247,7 @@ fn provide_liquidity_multiple() {
                 to_address: provider.to_string(),
                 amount: vec![coin(juno_amt.u128(), "juno")],
             }))
+            .map_err(|e| anyhow::anyhow!("{e}"))
             .unwrap();
 
         suite
@@ -229,11 +272,11 @@ fn provide_liquidity_multiple() {
                 .unwrap()
         })
         .collect();
-    let total_lp: u128 = lp_balances.iter().sum();
+    let total_lp: Uint256 = lp_balances.iter().copied().sum();
     for (i, balance) in lp_balances.into_iter().enumerate() {
         // check that each LP token balance is proportional to their share
         assert_approx_eq!(
-            Decimal::from_ratio(balance, total_lp).numerator(),
+            Uint128::try_from(Decimal256::from_ratio(balance, total_lp).numerator()).unwrap(),
             providers[i].1.numerator(),
             "0.000000000001"
         );
@@ -242,26 +285,26 @@ fn provide_liquidity_multiple() {
     // withdraw liquidity one by one
     for (provider, share) in providers {
         let lp_amount = suite
-            .query_cw20_balance(provider, &pair_info.liquidity_token)
+            .query_cw20_balance(&provider, &pair_info.liquidity_token)
             .unwrap();
         suite
             .withdraw_liquidity(
-                provider,
+                &provider,
                 &pair,
                 &pair_info.liquidity_token,
-                lp_amount,
+                Uint128::try_from(lp_amount).unwrap().u128(),
                 vec![],
             )
             .unwrap();
 
         // should have received back their share of the pool
         assert_approx_eq!(
-            suite.query_balance(provider, "juno").unwrap().into(),
+            Uint128::try_from(suite.query_balance(&provider, "juno").unwrap()).unwrap(),
             total_lsd.mul_floor(target_rate * share),
             "0.000000000001"
         );
         assert_approx_eq!(
-            suite.query_cw20_balance(provider, &wy_juno).unwrap().into(),
+            Uint128::try_from(suite.query_cw20_balance(&provider, &wy_juno).unwrap()).unwrap(),
             total_lsd.mul_floor(share),
             "0.000000000001"
         );
@@ -272,12 +315,15 @@ fn provide_liquidity_multiple() {
 fn provide_liquidity_changing_rate() {
     let target_rate = Decimal::from_str("1.5").unwrap();
     let mut suite = SuiteBuilder::new()
-        .with_funds("sender", &[coin(150_0000000000, "juno")])
+        .with_funds(
+            &MockApi::default().addr_make("sender"),
+            &[coin(150_0000000000, "juno")],
+        )
         .with_initial_target_rate(target_rate)
         .build();
 
     let juno_info = AssetInfo::Native("juno".to_string());
-    let wy_juno = suite.instantiate_token("owner", "wyJUNO");
+    let wy_juno = suite.instantiate_token(&MockApi::default().addr_make("owner"), "wyJUNO");
     let wy_juno_info = AssetInfo::Token(wy_juno.to_string());
 
     let pair = suite
@@ -285,7 +331,7 @@ fn provide_liquidity_changing_rate() {
             PairType::Lsd {},
             Some(StablePoolParams {
                 amp: 45,
-                owner: Some("owner".to_string()),
+                owner: Some(MockApi::default().addr_make("owner").to_string()),
                 lsd: Some(LsdInfo {
                     asset: wy_juno_info.clone(),
                     hub: suite.mock_hub.to_string(),
@@ -307,11 +353,14 @@ fn provide_liquidity_changing_rate() {
 
     // withdraw all liquidity
     let lp_amount = suite
-        .query_cw20_balance("whale", &pair_info.liquidity_token)
+        .query_cw20_balance(
+            &MockApi::default().addr_make("whale"),
+            &pair_info.liquidity_token,
+        )
         .unwrap();
     suite
         .withdraw_liquidity(
-            "whale",
+            &MockApi::default().addr_make("whale"),
             &pair,
             &pair_info.liquidity_token,
             lp_amount,
@@ -319,11 +368,15 @@ fn provide_liquidity_changing_rate() {
         )
         .unwrap();
 
-    let juno_balance = suite.query_balance("whale", "juno").unwrap();
-    let wy_juno_balance = suite.query_cw20_balance("whale", &wy_juno).unwrap();
+    let juno_balance = suite
+        .query_balance(&MockApi::default().addr_make("whale"), "juno")
+        .unwrap();
+    let wy_juno_balance = suite
+        .query_cw20_balance(&MockApi::default().addr_make("whale"), &wy_juno)
+        .unwrap();
     assert_approx_eq!(
-        Decimal::from_ratio(juno_balance, wy_juno_balance).atomics(),
-        target_rate.atomics(),
+        Uint128::try_from(Decimal256::from_ratio(juno_balance, wy_juno_balance).atomics()).unwrap(),
+        Uint128::try_from(target_rate.atomics()).unwrap(),
         "0.0002"
     );
 }
@@ -332,16 +385,19 @@ fn provide_liquidity_changing_rate() {
 fn changing_target_rate() {
     let target_rate = Decimal::from_str("1.5").unwrap();
     let mut suite = SuiteBuilder::new()
-        .with_funds("sender", &[coin(1_000_000_000_000_000_000_000, "juno")])
         .with_funds(
-            "arbitrageur",
+            &MockApi::default().addr_make("sender"),
+            &[coin(1_000_000_000_000_000_000_000, "juno")],
+        )
+        .with_funds(
+            &MockApi::default().addr_make("arbitrageur"),
             &[coin(1_000_000_000_000_000_000_000, "juno")],
         )
         .with_initial_target_rate(target_rate)
         .build();
 
     let juno_info = AssetInfo::Native("juno".to_string());
-    let wy_juno = suite.instantiate_token("owner", "wyJUNO");
+    let wy_juno = suite.instantiate_token(&MockApi::default().addr_make("owner"), "wyJUNO");
     let wy_juno_info = AssetInfo::Token(wy_juno.to_string());
 
     let pair = suite
@@ -349,7 +405,7 @@ fn changing_target_rate() {
             PairType::Lsd {},
             Some(StablePoolParams {
                 amp: 45,
-                owner: Some("owner".to_string()),
+                owner: Some(MockApi::default().addr_make("owner").to_string()),
                 lsd: Some(LsdInfo {
                     asset: wy_juno_info.clone(),
                     hub: suite.mock_hub.to_string(),
@@ -365,8 +421,8 @@ fn changing_target_rate() {
     let sim = suite
         .query_simulation(&pair, wy_juno_info.with_balance(10u128), None)
         .unwrap();
-    assert_eq!(sim.return_amount.u128(), 15);
-    assert_eq!(sim.spread_amount.u128(), 0);
+    assert_eq!(Uint128::try_from(sim.return_amount).unwrap().u128(), 15);
+    assert_eq!(Uint128::try_from(sim.spread_amount).unwrap().u128(), 0);
 
     let max_target_rate = Decimal::from_str("1.6").unwrap();
     let target_rate_step = Decimal::from_str("0.01").unwrap();
@@ -384,7 +440,7 @@ fn changing_target_rate() {
             .query_simulation(&pair, wy_juno_info.with_balance(100_000u128), None)
             .unwrap();
         assert_approx_eq!(
-            sim.return_amount,
+            Uint128::try_from(sim.return_amount).unwrap(),
             Uint128::from(100_000u128).mul_floor(target_rate),
             "0.0001"
         );
@@ -394,7 +450,7 @@ fn changing_target_rate() {
     suite
         .swap(
             &pair,
-            "sender",
+            &MockApi::default().addr_make("sender"),
             juno_info.with_balance(160_000u128),
             wy_juno_info.clone(),
             None,
@@ -403,8 +459,10 @@ fn changing_target_rate() {
         )
         .unwrap();
     assert_eq!(
-        suite.query_cw20_balance("sender", &wy_juno).unwrap(),
-        100_000u128
+        suite
+            .query_cw20_balance(&MockApi::default().addr_make("sender"), &wy_juno)
+            .unwrap(),
+        Uint256::new(100_000u128)
     );
 
     let min_target_rate = Decimal::from_str("1.4").unwrap();
@@ -422,7 +480,7 @@ fn changing_target_rate() {
             .query_simulation(&pair, juno_info.with_balance(100_000u128), None)
             .unwrap();
         assert_approx_eq!(
-            sim.return_amount,
+            Uint128::try_from(sim.return_amount).unwrap(),
             Uint128::from(100_000u128)
                 .multiply_ratio(target_rate.denominator(), target_rate.numerator()),
             "0.0001"
@@ -434,16 +492,19 @@ fn changing_target_rate() {
 fn drastic_rate_change() {
     let target_rate = Decimal::from_atomics(2u128, 0).unwrap();
     let mut suite = SuiteBuilder::new()
-        .with_funds("sender", &[coin(1_000_000_000_000_000_000_000, "juno")])
         .with_funds(
-            "arbitrageur",
+            &MockApi::default().addr_make("sender"),
+            &[coin(1_000_000_000_000_000_000_000, "juno")],
+        )
+        .with_funds(
+            &MockApi::default().addr_make("arbitrageur"),
             &[coin(1_000_000_000_000_000_000_000, "juno")],
         )
         .with_initial_target_rate(target_rate)
         .build();
 
     let juno_info = AssetInfo::Native("juno".to_string());
-    let wy_juno = suite.instantiate_token("owner", "wyJUNO");
+    let wy_juno = suite.instantiate_token(&MockApi::default().addr_make("owner"), "wyJUNO");
     let wy_juno_info = AssetInfo::Token(wy_juno.to_string());
 
     let pair = suite
@@ -451,7 +512,7 @@ fn drastic_rate_change() {
             PairType::Lsd {},
             Some(StablePoolParams {
                 amp: 45,
-                owner: Some("owner".to_string()),
+                owner: Some(MockApi::default().addr_make("owner").to_string()),
                 lsd: Some(LsdInfo {
                     asset: wy_juno_info.clone(),
                     hub: suite.mock_hub.to_string(),
@@ -467,14 +528,17 @@ fn drastic_rate_change() {
     let sim = suite
         .query_simulation(&pair, wy_juno_info.with_balance(100_000u128), None)
         .unwrap();
-    assert_eq!(sim.return_amount.u128(), 200_000);
-    assert_eq!(sim.spread_amount.u128(), 0);
+    assert_eq!(
+        Uint128::try_from(sim.return_amount).unwrap().u128(),
+        200_000
+    );
+    assert_eq!(Uint128::try_from(sim.spread_amount).unwrap().u128(), 0);
 
     // check spot price is 1 wyJUNO -> 2 JUNO
     let spot = suite
         .query_spot_price(&pair, &wy_juno_info, &juno_info)
         .unwrap();
-    assert_eq!(spot, Decimal::percent(200));
+    assert_eq!(spot, Decimal256::percent(200));
 
     // change target rate to 1.2 and wait for cache to expire
     let target_rate = Decimal::from_atomics(12u128, 1).unwrap();
@@ -485,7 +549,7 @@ fn drastic_rate_change() {
     let spot = suite
         .query_spot_price(&pair, &wy_juno_info, &juno_info)
         .unwrap();
-    assert_eq!(spot, Decimal::percent(200));
+    assert_eq!(spot, Decimal256::percent(200));
 
     // we have too much JUNO in the pool, so we arbitrage it away
     arbitrage_to(&mut suite, &pair, &wy_juno_info, target_rate);
@@ -494,12 +558,12 @@ fn drastic_rate_change() {
     let spot = suite
         .query_spot_price(&pair, &wy_juno_info, &juno_info)
         .unwrap();
-    assert_eq!(spot, Decimal::percent(120));
+    assert_eq!(spot, Decimal256::percent(120));
 
     suite
         .swap(
             &pair,
-            "sender",
+            &MockApi::default().addr_make("sender"),
             juno_info.with_balance(1_200_000u128),
             None,
             None,
@@ -508,8 +572,13 @@ fn drastic_rate_change() {
         )
         .unwrap();
     assert_approx_eq!(
-        suite.query_cw20_balance("sender", &wy_juno).unwrap(),
-        1_000_000u128,
+        Uint128::try_from(
+            suite
+                .query_cw20_balance(&MockApi::default().addr_make("sender"), &wy_juno)
+                .unwrap()
+        )
+        .unwrap(),
+        Uint128::new(1_000_000u128),
         "0.000002"
     );
 
@@ -517,7 +586,7 @@ fn drastic_rate_change() {
     let spot = suite
         .query_spot_price(&pair, &wy_juno_info, &juno_info)
         .unwrap();
-    assert_eq!(spot, Decimal::from_atomics(1_199_999u128, 6).unwrap());
+    assert_eq!(spot, Decimal256::from_atomics(1_199_999u128, 6).unwrap());
 
     // change target rate to 2.5 and wait for cache to expire
     let target_rate = Decimal::from_atomics(25u128, 1).unwrap();
@@ -528,7 +597,7 @@ fn drastic_rate_change() {
     let spot = suite
         .query_spot_price(&pair, &wy_juno_info, &juno_info)
         .unwrap();
-    assert_eq!(spot, Decimal::from_atomics(1_199_999u128, 6).unwrap());
+    assert_eq!(spot, Decimal256::from_atomics(1_199_999u128, 6).unwrap());
 
     // we have too much wyJUNO in the pool, so we arbitrage it away
     // the next swap will fail with spread assertion if we don't
@@ -538,13 +607,15 @@ fn drastic_rate_change() {
     let spot = suite
         .query_spot_price(&pair, &wy_juno_info, &juno_info)
         .unwrap();
-    assert_eq!(spot, Decimal::from_atomics(2_500_001u128, 6).unwrap());
+    assert_eq!(spot, Decimal256::from_atomics(2_500_001u128, 6).unwrap());
 
-    let prev_balance = suite.query_balance("sender", "juno").unwrap();
+    let prev_balance = suite
+        .query_balance(&MockApi::default().addr_make("sender"), "juno")
+        .unwrap();
     suite
         .swap(
             &pair,
-            "sender",
+            &MockApi::default().addr_make("sender"),
             wy_juno_info.with_balance(1_000_000u128),
             None,
             None,
@@ -553,8 +624,14 @@ fn drastic_rate_change() {
         )
         .unwrap();
     assert_approx_eq!(
-        suite.query_balance("sender", "juno").unwrap() - prev_balance,
-        2_500_000u128,
+        Uint128::try_from(
+            suite
+                .query_balance(&MockApi::default().addr_make("sender"), "juno")
+                .unwrap()
+                - prev_balance
+        )
+        .unwrap(),
+        Uint128::new(2_500_000u128),
         "0.0000004"
     );
 }
@@ -563,13 +640,19 @@ fn drastic_rate_change() {
 fn changing_spot_price() {
     let target_rate = Decimal::from_atomics(15u128, 1).unwrap();
     let mut suite = SuiteBuilder::new()
-        .with_funds("sender", &[coin(1_000_000_000, "juno")])
-        .with_funds("arbitrageur", &[coin(1_000_000_000, "juno")])
+        .with_funds(
+            &MockApi::default().addr_make("sender"),
+            &[coin(1_000_000_000, "juno")],
+        )
+        .with_funds(
+            &MockApi::default().addr_make("arbitrageur"),
+            &[coin(1_000_000_000, "juno")],
+        )
         .with_initial_target_rate(target_rate)
         .build();
 
     let juno_info = AssetInfo::Native("juno".to_string());
-    let wy_juno = suite.instantiate_token("owner", "wyJUNO");
+    let wy_juno = suite.instantiate_token(&MockApi::default().addr_make("owner"), "wyJUNO");
     let wy_juno_info = AssetInfo::Token(wy_juno.to_string());
 
     let pair = suite
@@ -577,7 +660,7 @@ fn changing_spot_price() {
             PairType::Lsd {},
             Some(StablePoolParams {
                 amp: 45,
-                owner: Some("owner".to_string()),
+                owner: Some(MockApi::default().addr_make("owner").to_string()),
                 lsd: Some(LsdInfo {
                     asset: wy_juno_info.clone(),
                     hub: suite.mock_hub.to_string(),
@@ -594,13 +677,13 @@ fn changing_spot_price() {
     let spot = suite
         .query_spot_price(&pair, &wy_juno_info, &juno_info)
         .unwrap();
-    assert_eq!(spot, Decimal::from_atomics(1_499_674u128, 6).unwrap());
+    assert_eq!(spot, Decimal256::from_atomics(1_499_674u128, 6).unwrap());
 
     // small swap (3% of juno) stays close to target
     suite
         .swap(
             &pair,
-            "sender",
+            &MockApi::default().addr_make("sender"),
             juno_info.with_balance(4_500_000u128),
             None,
             None,
@@ -609,8 +692,13 @@ fn changing_spot_price() {
         )
         .unwrap();
     assert_approx_eq!(
-        suite.query_cw20_balance("sender", &wy_juno).unwrap(),
-        3_000_000u128,
+        Uint128::try_from(
+            suite
+                .query_cw20_balance(&MockApi::default().addr_make("sender"), &wy_juno)
+                .unwrap()
+        )
+        .unwrap(),
+        Uint128::new(3_000_000u128),
         "0.001"
     );
 
@@ -618,13 +706,13 @@ fn changing_spot_price() {
     let spot = suite
         .query_spot_price(&pair, &wy_juno_info, &juno_info)
         .unwrap();
-    assert_eq!(spot, Decimal::from_atomics(1_501_633u128, 6).unwrap());
+    assert_eq!(spot, Decimal256::from_atomics(1_501_633u128, 6).unwrap());
 
     // big swap (double juno) changes price a lot target
     suite
         .swap(
             &pair,
-            "sender",
+            &MockApi::default().addr_make("sender"),
             juno_info.with_balance(150_000_000u128),
             None,
             None,
@@ -638,7 +726,7 @@ fn changing_spot_price() {
     let spot = suite
         .query_spot_price(&pair, &wy_juno_info, &juno_info)
         .unwrap();
-    assert_eq!(spot, Decimal::from_atomics(3_483_313u128, 6).unwrap());
+    assert_eq!(spot, Decimal256::from_atomics(3_483_313u128, 6).unwrap());
 }
 
 #[test]
@@ -646,13 +734,19 @@ fn predict_swap_spot_price() {
     let iterations = 10u8;
     let target_rate = Decimal::from_atomics(15u128, 1).unwrap();
     let mut suite = SuiteBuilder::new()
-        .with_funds("sender", &[coin(1_000_000_000, "juno")])
-        .with_funds("arbitrageur", &[coin(1_000_000_000, "juno")])
+        .with_funds(
+            &MockApi::default().addr_make("sender"),
+            &[coin(1_000_000_000, "juno")],
+        )
+        .with_funds(
+            &MockApi::default().addr_make("arbitrageur"),
+            &[coin(1_000_000_000, "juno")],
+        )
         .with_initial_target_rate(target_rate)
         .build();
 
     let juno_info = AssetInfo::Native("juno".to_string());
-    let wy_juno = suite.instantiate_token("owner", "wyJUNO");
+    let wy_juno = suite.instantiate_token(&MockApi::default().addr_make("owner"), "wyJUNO");
     let wy_juno_info = AssetInfo::Token(wy_juno.to_string());
 
     let pair = suite
@@ -660,7 +754,7 @@ fn predict_swap_spot_price() {
             PairType::Lsd {},
             Some(StablePoolParams {
                 amp: 6,
-                owner: Some("owner".to_string()),
+                owner: Some(MockApi::default().addr_make("owner").to_string()),
                 lsd: Some(LsdInfo {
                     asset: wy_juno_info.clone(),
                     hub: suite.mock_hub.to_string(),
@@ -679,13 +773,13 @@ fn predict_swap_spot_price() {
         .unwrap();
     // this is within 0.01%
     assert_approx_eq!(
-        Uint128::new(1_000_000).mul_floor(spot),
+        Uint128::try_from(Uint256::from(1_000_000u128).mul_floor(spot)).unwrap(),
         Uint128::new(666666),
         "0.0001"
     );
 
     // aiming for a price above current will return None
-    let amount = Uint128::new(100_000_000);
+    let amount = Uint256::from(100_000_000u128);
     let to_swap = suite
         .query_predict_spot_price(
             &pair,
@@ -726,7 +820,7 @@ fn predict_swap_spot_price() {
     suite
         .swap(
             &pair,
-            "sender",
+            &MockApi::default().addr_make("sender"),
             juno_info.with_balance(to_swap),
             None,
             None,
@@ -741,7 +835,7 @@ fn predict_swap_spot_price() {
         .unwrap();
     // this is within 0.01%
     assert_approx_eq!(
-        Uint128::new(1_000_000).mul_floor(spot),
+        Uint128::try_from(Uint256::from(1_000_000u128).mul_floor(spot)).unwrap(),
         Uint128::new(1_000_000).mul_floor(target),
         "0.0001"
     );
@@ -760,32 +854,37 @@ pub fn arbitrage_to(
         target_rate = Decimal::one() / target_rate;
     }
 
-    let mut amount = Uint128::from(100_000_000_000_000u128);
-    const TEN: Uint128 = Uint128::new(10u128);
-    const MAX_AMT: Uint128 = Uint128::new(100u128);
+    let target_rate256: Decimal256 = target_rate.into();
+    let mut amount = Uint256::from(100_000_000_000_000u128);
+    const TEN: Uint256 = Uint256::new(10u128);
+    const MAX_AMT: Uint256 = Uint256::new(100u128);
     loop {
         let sim = suite
             .query_simulation(pair, offer_asset.with_balance(amount), None)
             .unwrap();
 
         if amount < MAX_AMT
-            || (sim.return_amount + sim.commission_amount).mul_floor(target_rate) == amount
+            || (sim.return_amount + sim.commission_amount).mul_floor(target_rate256) == amount
         {
             break;
         }
-        if (sim.return_amount + sim.commission_amount).mul_floor(target_rate) <= amount {
+        if (sim.return_amount + sim.commission_amount).mul_floor(target_rate256) <= amount {
             amount /= TEN;
             continue;
         }
 
         suite
-            .mint("owner", offer_asset.with_balance(amount), "arbitrageur")
+            .mint(
+                &MockApi::default().addr_make("owner"),
+                offer_asset.with_balance(amount),
+                &MockApi::default().addr_make("arbitrageur"),
+            )
             .unwrap();
 
         suite
             .swap(
                 pair,
-                "arbitrageur",
+                &MockApi::default().addr_make("arbitrageur"),
                 offer_asset.with_balance(amount),
                 None,
                 None,

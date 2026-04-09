@@ -4,7 +4,7 @@ use wyndex::asset::{Asset, AssetInfo};
 use wyndex::pair::PairInfo;
 
 use cosmwasm_std::{
-    to_json_binary, Addr, Coin, Decimal, Deps, QuerierWrapper, StdResult, SubMsg, Uint128, WasmMsg,
+    to_json_binary, Addr, Coin, Decimal256, Deps, QuerierWrapper, StdResult, SubMsg, Uint256, WasmMsg,
 };
 use wyndex::pair::{Cw20HookMsg, SimulationResponse};
 
@@ -16,7 +16,7 @@ pub const ROUTES_MAX_DEPTH: u64 = 2;
 pub const ROUTES_EXECUTION_MAX_DEPTH: u64 = 3;
 /// This amount of tokens is used in get_pool swap simulations.
 /// TODO: adjust according to token's precision?
-pub const SWAP_SIMULATION_AMOUNT: Uint128 = Uint128::new(1_000_000u128);
+pub const SWAP_SIMULATION_AMOUNT: Uint256 = Uint256::new(1_000_000u128);
 
 /// The function checks from<>to pool exists and creates swap message.
 ///
@@ -30,8 +30,8 @@ pub fn try_build_swap_msg(
     cfg: &Config,
     from: &AssetInfo,
     to: &AssetInfo,
-    amount_in: Uint128,
-    belief_price: Option<Decimal>,
+    amount_in: Uint256,
+    belief_price: Option<Decimal256>,
 ) -> Result<SubMsg, ContractError> {
     let (pool, _) = get_pool(
         querier,
@@ -63,12 +63,12 @@ pub fn try_build_swap_msg(
 ///
 /// * **amount_in** amount of tokens to swap.
 pub fn build_swap_msg(
-    max_spread: Decimal,
+    max_spread: Decimal256,
     pool: &PairInfo,
     from: &AssetInfo,
     to: Option<&AssetInfo>,
-    amount_in: Uint128,
-    belief_price: Option<Decimal>,
+    amount_in: Uint256,
+    belief_price: Option<Decimal256>,
 ) -> Result<SubMsg, ContractError> {
     if from.is_native_token() {
         let offer_asset = Asset {
@@ -89,7 +89,7 @@ pub fn build_swap_msg(
             })?,
             funds: vec![Coin {
                 denom: offer_asset.info.to_string(),
-                amount: offer_asset.amount,
+                amount: offer_asset.amount.into(),
             }],
         }))
     } else {
@@ -97,7 +97,7 @@ pub fn build_swap_msg(
             contract_addr: from.to_string(),
             msg: to_json_binary(&cw20::Cw20ExecuteMsg::Send {
                 contract: pool.contract_addr.to_string(),
-                amount: amount_in,
+                amount: amount_in.into(),
                 msg: to_json_binary(&Cw20HookMsg::Swap {
                     ask_asset_info: to.cloned(),
                     belief_price,
@@ -131,7 +131,7 @@ pub fn validate_route(
     route_token: &AssetInfo,
     desired_token: &AssetInfo,
     depth: u64,
-    amount: Option<Uint128>,
+    amount: Option<Uint256>,
 ) -> Result<PairInfo, ContractError> {
     // Check if the route pool exists
     let (route_pool, ret_amount) = get_pool(
@@ -186,8 +186,8 @@ pub fn get_pool(
     factory_contract: &Addr,
     from: &AssetInfo,
     to: &AssetInfo,
-    amount: Option<Uint128>,
-) -> Result<(PairInfo, Option<Uint128>), ContractError> {
+    amount: Option<Uint256>,
+) -> Result<(PairInfo, Option<Uint256>), ContractError> {
     // We use raw query to save gas
     let result = wyndex::factory::ROUTE.query(
         querier,

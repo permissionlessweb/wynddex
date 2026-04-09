@@ -1,8 +1,10 @@
 use std::collections::HashMap;
 
-use anyhow::{bail, Result as AnyResult};
+use anyhow::{bail, Error, Result as AnyResult};
 
-use cosmwasm_std::{to_json_binary, Addr, Coin, Decimal, Empty, StdResult, Uint128};
+use cosmwasm_std::{
+    testing::MockApi, to_json_binary, Addr, Coin, Decimal256, Empty, StdResult, Uint128, Uint256,
+};
 use cw20::{BalanceResponse, Cw20Coin, Cw20ExecuteMsg, Cw20QueryMsg, MinterResponse};
 use cw20_base::msg::InstantiateMsg as Cw20InstantiateMsg;
 use cw_controllers::{Claim, ClaimsResponse};
@@ -58,12 +60,12 @@ pub(super) fn native_token(denom: String, amount: u128) -> AssetValidated {
 
 #[derive(Debug)]
 pub struct SuiteBuilder {
-    pub cw20_contract: String,
-    pub tokens_per_power: Uint128,
-    pub min_bond: Uint128,
+    pub cw20_contract: Addr,
+    pub tokens_per_power: Uint256,
+    pub min_bond: Uint256,
     pub unbonding_periods: Vec<UnbondingPeriod>,
-    pub admin: Option<String>,
-    pub unbonder: Option<String>,
+    pub admin: Option<Addr>,
+    pub unbonder: Option<Addr>,
     pub initial_balances: Vec<Cw20Coin>,
     pub native_balances: Vec<(Addr, Coin)>,
 }
@@ -71,9 +73,9 @@ pub struct SuiteBuilder {
 impl SuiteBuilder {
     pub fn new() -> Self {
         Self {
-            cw20_contract: "".to_owned(),
-            tokens_per_power: Uint128::new(1000),
-            min_bond: Uint128::new(5000),
+            cw20_contract: Addr::unchecked(""),
+            tokens_per_power: Uint256::from(1000u128),
+            min_bond: Uint256::from(5000u128),
             unbonding_periods: vec![SEVEN_DAYS],
             admin: None,
             unbonder: None,
@@ -82,7 +84,7 @@ impl SuiteBuilder {
         }
     }
 
-    pub fn with_native_balances(mut self, denom: &str, balances: Vec<(&str, u128)>) -> Self {
+    pub fn with_native_balances(mut self, denom: &str, balances: Vec<(&Addr, u128)>) -> Self {
         self.native_balances
             .extend(balances.into_iter().map(|(addr, amount)| {
                 (
@@ -96,11 +98,11 @@ impl SuiteBuilder {
         self
     }
 
-    pub fn with_initial_balances(mut self, balances: Vec<(&str, u128)>) -> Self {
+    pub fn with_initial_balances(mut self, balances: Vec<(&Addr, u128)>) -> Self {
         let initial_balances = balances
             .into_iter()
             .map(|(address, amount)| Cw20Coin {
-                address: address.to_owned(),
+                address: address.to_string(),
                 amount: amount.into(),
             })
             .collect::<Vec<Cw20Coin>>();
@@ -109,21 +111,21 @@ impl SuiteBuilder {
     }
 
     pub fn with_min_bond(mut self, min_bond: u128) -> Self {
-        self.min_bond = min_bond.into();
+        self.min_bond = Uint256::from(min_bond);
         self
     }
 
     pub fn with_tokens_per_power(mut self, tokens_per_power: u128) -> Self {
-        self.tokens_per_power = tokens_per_power.into();
+        self.tokens_per_power = Uint256::from(tokens_per_power);
         self
     }
 
-    pub fn with_admin(mut self, admin: &str) -> Self {
+    pub fn with_admin(mut self, admin: &Addr) -> Self {
         self.admin = Some(admin.to_owned());
         self
     }
 
-    pub fn with_unbonder(mut self, unbonder: &str) -> Self {
+    pub fn with_unbonder(mut self, unbonder: &Addr) -> Self {
         self.unbonder = Some(unbonder.to_owned());
         self
     }
@@ -153,7 +155,7 @@ impl SuiteBuilder {
             }
         });
 
-        let admin = Addr::unchecked("admin");
+        let admin = MockApi::default().addr_make("admin");
 
         let token_id = app.store_code(contract_token());
         let token_contract = app
@@ -166,7 +168,7 @@ impl SuiteBuilder {
                     decimals: 9,
                     initial_balances: self.initial_balances,
                     mint: Some(MinterResponse {
-                        minter: "minter".to_owned(),
+                        minter: MockApi::default().addr_make("minter").to_string(),
                         cap: None,
                     }),
                     marketing: None,
@@ -187,8 +189,11 @@ impl SuiteBuilder {
                     tokens_per_power: self.tokens_per_power,
                     min_bond: self.min_bond,
                     unbonding_periods: self.unbonding_periods,
-                    admin: self.admin,
-                    unbonder: self.unbonder,
+                    admin: self.admin.map(|e| Some(e.to_string())).unwrap_or_default(),
+                    unbonder: self
+                        .unbonder
+                        .map(|e| Some(e.to_string()))
+                        .unwrap_or_default(),
                     max_distributions: 6,
                     converter: None,
                 },
@@ -215,8 +220,8 @@ pub struct Suite {
 }
 
 impl Suite {
-    pub fn stake_contract(&self) -> String {
-        self.stake_contract.to_string()
+    pub fn stake_contract(&self) -> Addr {
+        self.stake_contract.clone()
     }
 
     pub fn token_contract(&self) -> String {
@@ -236,7 +241,7 @@ impl Suite {
         owner: &Addr,
         token_name: &str,
         decimals: Option<u8>,
-        balances: &[(&str, u128)],
+        balances: &[(&Addr, u128)],
     ) -> Addr {
         let init_msg = cw20_base::msg::InstantiateMsg {
             name: token_name.to_string(),
@@ -246,7 +251,7 @@ impl Suite {
                 .iter()
                 .map(|(address, amount)| Cw20Coin {
                     address: address.to_string(),
-                    amount: Uint128::from(*amount),
+                    amount: Uint128::from(*amount).into(),
                 })
                 .collect(),
             mint: Some(MinterResponse {
@@ -280,27 +285,30 @@ impl Suite {
     // create a new distribution flow for staking
     pub fn create_distribution_flow(
         &mut self,
-        sender: &str,
-        manager: &str,
+        sender: &Addr,
+        manager: &Addr,
         asset: AssetInfo,
-        rewards: Vec<(UnbondingPeriod, Decimal)>,
+        rewards: Vec<(UnbondingPeriod, Decimal256)>,
     ) -> AnyResult<AppResponse> {
-        self.app.execute_contract(
-            Addr::unchecked(sender),
-            self.stake_contract.clone(),
-            &ExecuteMsg::CreateDistributionFlow {
-                manager: manager.to_string(),
-                asset,
-                rewards,
-            },
-            &[],
-        )
+        Ok(self
+            .app
+            .execute_contract(
+                sender.to_owned(),
+                self.stake_contract.clone(),
+                &ExecuteMsg::CreateDistributionFlow {
+                    manager: manager.to_string(),
+                    asset,
+                    rewards,
+                },
+                &[],
+            )
+            .map_err(|e| Error::msg(e.to_string()))?)
     }
 
     // call to staking contract by sender
     pub fn delegate(
         &mut self,
-        sender: &str,
+        sender: &Addr,
         amount: u128,
         unbonding_period: impl Into<Option<u64>>,
     ) -> AnyResult<AppResponse> {
@@ -310,155 +318,184 @@ impl Suite {
     // call to staking contract by sender
     pub fn delegate_as(
         &mut self,
-        sender: &str,
+        sender: &Addr,
         amount: u128,
         unbonding_period: impl Into<Option<u64>>,
-        delegate_as: Option<&str>,
+        delegate_as: Option<&Addr>,
     ) -> AnyResult<AppResponse> {
-        self.app.execute_contract(
-            Addr::unchecked(sender),
-            self.token_contract.clone(),
-            &Cw20ExecuteMsg::Send {
-                contract: self.stake_contract.to_string(),
-                amount: amount.into(),
-                msg: to_json_binary(&ReceiveMsg::Delegate {
-                    unbonding_period: self.unbonding_period_or_default(unbonding_period),
-                    delegate_as: delegate_as.map(|s| s.to_string()),
-                })?,
-            },
-            &[],
-        )
+        Ok(self
+            .app
+            .execute_contract(
+                sender.to_owned(),
+                self.token_contract.clone(),
+                &Cw20ExecuteMsg::Send {
+                    contract: self.stake_contract.to_string(),
+                    amount: amount.into(),
+                    msg: to_json_binary(&ReceiveMsg::Delegate {
+                        unbonding_period: self.unbonding_period_or_default(unbonding_period),
+                        delegate_as: delegate_as.map(|s| s.to_string()),
+                    })
+                    .map_err(|e| anyhow::anyhow!("{e}"))?,
+                },
+                &[],
+            )
+            .map_err(|e| Error::msg(e.to_string()))?)
     }
 
     // call to staking contract by sender
     pub fn mass_delegate(
         &mut self,
-        sender: &str,
+        sender: &Addr,
         amount: u128,
         unbonding_period: impl Into<Option<u64>>,
-        delegate_to: &[(&str, u128)],
+        delegate_to: &[(&Addr, u128)],
     ) -> AnyResult<AppResponse> {
         let delegate_to = delegate_to
             .iter()
-            .map(|(a, b)| (a.to_string(), Uint128::new(*b)))
+            .map(|(a, b)| (a.to_string(), Uint256::from(*b)))
             .collect();
 
-        self.app.execute_contract(
-            Addr::unchecked(sender),
-            self.token_contract.clone(),
-            &Cw20ExecuteMsg::Send {
-                contract: self.stake_contract.to_string(),
-                amount: amount.into(),
-                msg: to_json_binary(&ReceiveMsg::MassDelegate {
-                    unbonding_period: self.unbonding_period_or_default(unbonding_period),
-                    delegate_to,
-                })?,
-            },
-            &[],
-        )
+        Ok(self
+            .app
+            .execute_contract(
+                sender.to_owned(),
+                self.token_contract.clone(),
+                &Cw20ExecuteMsg::Send {
+                    contract: self.stake_contract.to_string(),
+                    amount: amount.into(),
+                    msg: to_json_binary(&ReceiveMsg::MassDelegate {
+                        unbonding_period: self.unbonding_period_or_default(unbonding_period),
+                        delegate_to,
+                    })
+                    .map_err(|e| anyhow::anyhow!("{e}"))?,
+                },
+                &[],
+            )
+            .map_err(|e| Error::msg(e.to_string()))?)
     }
 
     // call to stake contract by sender
     pub fn rebond(
         &mut self,
-        sender: &str,
+        sender: &Addr,
         amount: u128,
         bond_from: impl Into<Option<u64>>,
         bond_to: impl Into<Option<u64>>,
     ) -> AnyResult<AppResponse> {
-        self.app.execute_contract(
-            Addr::unchecked(sender),
-            self.stake_contract.clone(),
-            &ExecuteMsg::Rebond {
-                tokens: amount.into(),
-                bond_from: self.unbonding_period_or_default(bond_from),
-                bond_to: self.unbonding_period_or_default(bond_to),
-            },
-            &[],
-        )
+        Ok(self
+            .app
+            .execute_contract(
+                sender.to_owned(),
+                self.stake_contract.clone(),
+                &ExecuteMsg::Rebond {
+                    tokens: amount.into(),
+                    bond_from: self.unbonding_period_or_default(bond_from),
+                    bond_to: self.unbonding_period_or_default(bond_to),
+                },
+                &[],
+            )
+            .map_err(|e| Error::msg(e.to_string()))?)
     }
 
     pub fn unbond(
         &mut self,
-        sender: &str,
+        sender: &Addr,
         amount: u128,
         unbonding_period: impl Into<Option<u64>>,
     ) -> AnyResult<AppResponse> {
-        self.app.execute_contract(
-            Addr::unchecked(sender),
-            self.stake_contract.clone(),
-            &ExecuteMsg::Unbond {
-                tokens: amount.into(),
-                unbonding_period: self.unbonding_period_or_default(unbonding_period),
-            },
-            &[],
-        )
+        Ok(self
+            .app
+            .execute_contract(
+                sender.to_owned(),
+                self.stake_contract.clone(),
+                &ExecuteMsg::Unbond {
+                    tokens: amount.into(),
+                    unbonding_period: self.unbonding_period_or_default(unbonding_period),
+                },
+                &[],
+            )
+            .map_err(|e| Error::msg(e.to_string()))?)
     }
 
-    pub fn quick_unbond(&mut self, sender: &str, stakers: &[&str]) -> AnyResult<AppResponse> {
+    pub fn quick_unbond(&mut self, sender: &Addr, stakers: &[&Addr]) -> AnyResult<AppResponse> {
         let stakers = stakers.iter().map(|s| s.to_string()).collect();
-        self.app.execute_contract(
-            Addr::unchecked(sender),
-            self.stake_contract.clone(),
-            &ExecuteMsg::QuickUnbond { stakers },
-            &[],
-        )
+        Ok(self
+            .app
+            .execute_contract(
+                sender.to_owned(),
+                self.stake_contract.clone(),
+                &ExecuteMsg::QuickUnbond { stakers },
+                &[],
+            )
+            .map_err(|e| Error::msg(e.to_string()))?)
     }
 
-    pub fn claim(&mut self, sender: &str) -> AnyResult<AppResponse> {
-        self.app.execute_contract(
-            Addr::unchecked(sender),
-            self.stake_contract.clone(),
-            &ExecuteMsg::Claim {},
-            &[],
-        )
+    pub fn claim(&mut self, sender: &Addr) -> AnyResult<AppResponse> {
+        Ok(self
+            .app
+            .execute_contract(
+                sender.to_owned(),
+                self.stake_contract.clone(),
+                &ExecuteMsg::Claim {},
+                &[],
+            )
+            .map_err(|e| Error::msg(e.to_string()))?)
     }
 
     // call to vesting contract
     pub fn transfer(
         &mut self,
-        sender: &str,
+        sender: &Addr,
         recipient: &str,
         amount: impl Into<Uint128>,
     ) -> AnyResult<AppResponse> {
-        self.app.execute_contract(
-            Addr::unchecked(sender),
-            self.token_contract.clone(),
-            &Cw20ExecuteMsg::Transfer {
-                recipient: recipient.into(),
-                amount: amount.into(),
-            },
-            &[],
-        )
+        Ok(self
+            .app
+            .execute_contract(
+                sender.to_owned(),
+                self.token_contract.clone(),
+                &Cw20ExecuteMsg::Transfer {
+                    recipient: recipient.into(),
+                    amount: amount.into().into(),
+                },
+                &[],
+            )
+            .map_err(|e| Error::msg(e.to_string()))?)
     }
 
     pub fn distribute_funds<'s>(
         &mut self,
-        executor: &str,
-        sender: impl Into<Option<&'s str>>,
+        executor: &Addr,
+        sender: impl Into<Option<&'s Addr>>,
         funds: Option<AssetValidated>,
     ) -> AnyResult<AppResponse> {
         let sender = sender.into();
 
         if let Some(funds) = funds {
-            let transfer_msg = funds.into_msg(self.stake_contract.clone())?;
+            let transfer_msg = funds
+                .into_msg(self.stake_contract.clone())
+                .map_err(|e| anyhow::anyhow!("{e}"))?;
             self.app
-                .execute(Addr::unchecked(sender.unwrap_or(executor)), transfer_msg)?;
+                .execute(Addr::unchecked(sender.unwrap_or(executor)), transfer_msg)
+                .map_err(|e| anyhow::anyhow!("{e}"))?;
         }
 
-        self.app.execute_contract(
-            Addr::unchecked(executor),
-            self.stake_contract.clone(),
-            &ExecuteMsg::DistributeRewards {
-                sender: sender.map(str::to_owned),
-            },
-            &[],
-        )
+        Ok(self
+            .app
+            .execute_contract(
+                executor.to_owned(),
+                self.stake_contract.clone(),
+                &ExecuteMsg::DistributeRewards {
+                    sender: sender.map(Addr::to_string),
+                },
+                &[],
+            )
+            .map_err(|e| Error::msg(e.to_string()))?)
     }
 
     pub fn execute_fund_distribution<'s>(
         &mut self,
-        executor: &str,
+        executor: &Addr,
         sender: impl Into<Option<&'s str>>,
         funds: AssetValidated,
     ) -> AnyResult<AppResponse> {
@@ -466,56 +503,62 @@ impl Suite {
 
         let curr_block = self.app.block_info().time;
 
-        self.app.execute_contract(
-            Addr::unchecked(executor),
-            self.stake_contract.clone(),
-            &ExecuteMsg::FundDistribution {
-                funding_info: FundingInfo {
-                    start_time: curr_block.seconds(),
-                    distribution_duration: 100,
-                    amount: funds.amount,
+        Ok(self
+            .app
+            .execute_contract(
+                executor.to_owned(),
+                self.stake_contract.clone(),
+                &ExecuteMsg::FundDistribution {
+                    funding_info: FundingInfo {
+                        start_time: curr_block.seconds(),
+                        distribution_duration: 100,
+                        amount: funds.amount,
+                    },
                 },
-            },
-            &[Coin {
-                denom: funds.info.to_string(),
-                amount: funds.amount,
-            }],
-        )
+                &[Coin {
+                    denom: funds.info.to_string(),
+                    amount: funds.amount,
+                }],
+            )
+            .map_err(|e| Error::msg(e.to_string()))?)
     }
 
     pub fn execute_fund_distribution_curve(
         &mut self,
-        executor: &str,
+        executor: &Addr,
         denom: impl Into<String>,
         amount: u128,
         distribution_duration: u64,
     ) -> AnyResult<AppResponse> {
         let curr_block = self.app.block_info().time;
 
-        self.app.execute_contract(
-            Addr::unchecked(executor),
-            self.stake_contract.clone(),
-            &ExecuteMsg::FundDistribution {
-                funding_info: FundingInfo {
-                    start_time: curr_block.seconds(),
-                    distribution_duration,
-                    amount: Uint128::from(amount),
+        Ok(self
+            .app
+            .execute_contract(
+                executor.to_owned(),
+                self.stake_contract.clone(),
+                &ExecuteMsg::FundDistribution {
+                    funding_info: FundingInfo {
+                        start_time: curr_block.seconds(),
+                        distribution_duration,
+                        amount: Uint256::from(amount),
+                    },
                 },
-            },
-            &[Coin {
-                denom: denom.into(),
-                amount: Uint128::new(amount),
-            }],
-        )
+                &[Coin {
+                    denom: denom.into(),
+                    amount: Uint256::new(amount),
+                }],
+            )
+            .map_err(|e| Error::msg(e.to_string()))?)
     }
 
     // call to staking contract by sender
     pub fn execute_fund_distribution_with_cw20(
         &mut self,
-        executor: &str,
+        executor: &Addr,
         funds: AssetValidated,
     ) -> AnyResult<AppResponse> {
-        let funds_amount = funds.amount.u128();
+        let funds_amount = funds.amount;
         let curr_block = self.app.block_info().time;
 
         self.execute_fund_distribution_with_cw20_curve(
@@ -524,14 +567,14 @@ impl Suite {
             FundingInfo {
                 start_time: curr_block.seconds(),
                 distribution_duration: 100,
-                amount: Uint128::from(funds_amount),
+                amount: funds_amount,
             },
         )
     }
 
     pub fn execute_fund_distribution_with_cw20_curve(
         &mut self,
-        executor: &str,
+        executor: &Addr,
         funds: AssetValidated,
         funding_info: FundingInfo,
     ) -> AnyResult<AppResponse> {
@@ -539,74 +582,96 @@ impl Suite {
             AssetInfoValidated::Token(contract_addr) => contract_addr,
             _ => bail!("Only tokens are supported for cw20 distribution"),
         };
-        self.app.execute_contract(
-            Addr::unchecked(executor),
-            token,
-            &Cw20ExecuteMsg::Send {
-                contract: self.stake_contract.to_string(),
-                amount: funds.amount,
-                msg: to_json_binary(&ReceiveMsg::Fund { funding_info })?,
-            },
-            &[],
-        )
+        Ok(self
+            .app
+            .execute_contract(
+                executor.to_owned(),
+                token,
+                &Cw20ExecuteMsg::Send {
+                    contract: self.stake_contract.to_string(),
+                    amount: funds.amount,
+                    msg: to_json_binary(&ReceiveMsg::Fund { funding_info })
+                        .map_err(|e| anyhow::anyhow!("{e}"))?,
+                },
+                &[],
+            )
+            .map_err(|e| Error::msg(e.to_string()))?)
     }
 
-    pub fn execute_unbond_all(&mut self, executor: &str) -> AnyResult<AppResponse> {
-        self.app.execute_contract(
-            Addr::unchecked(executor),
-            self.stake_contract.clone(),
-            &ExecuteMsg::UnbondAll {},
-            &[],
-        )
+    pub fn execute_unbond_all(&mut self, executor: &Addr) -> AnyResult<AppResponse> {
+        Ok(self
+            .app
+            .execute_contract(
+                executor.to_owned(),
+                self.stake_contract.clone(),
+                &ExecuteMsg::UnbondAll {},
+                &[],
+            )
+            .map_err(|e| Error::msg(e.to_string()))?)
     }
 
-    pub fn execute_stop_unbond_all(&mut self, executor: &str) -> AnyResult<AppResponse> {
-        self.app.execute_contract(
-            Addr::unchecked(executor),
-            self.stake_contract.clone(),
-            &ExecuteMsg::StopUnbondAll {},
-            &[],
-        )
+    pub fn execute_stop_unbond_all(&mut self, executor: &Addr) -> AnyResult<AppResponse> {
+        Ok(self
+            .app
+            .execute_contract(
+                executor.to_owned(),
+                self.stake_contract.clone(),
+                &ExecuteMsg::StopUnbondAll {},
+                &[],
+            )
+            .map_err(|e| Error::msg(e.to_string()))?)
     }
 
     pub fn withdraw_funds<'s>(
         &mut self,
-        executor: &str,
+        executor: &Addr,
         owner: impl Into<Option<&'s str>>,
         receiver: impl Into<Option<&'s str>>,
     ) -> AnyResult<AppResponse> {
-        self.app.execute_contract(
-            Addr::unchecked(executor),
-            self.stake_contract.clone(),
-            &ExecuteMsg::WithdrawRewards {
-                owner: owner.into().map(str::to_owned),
-                receiver: receiver.into().map(str::to_owned),
-            },
-            &[],
-        )
+        Ok(self
+            .app
+            .execute_contract(
+                executor.to_owned(),
+                self.stake_contract.clone(),
+                &ExecuteMsg::WithdrawRewards {
+                    owner: match owner.into() {
+                        Some(o) => Some(o.to_string()),
+                        None => None,
+                    },
+                    receiver: match receiver.into() {
+                        Some(r) => Some(r.to_string()),
+                        None => None,
+                    },
+                },
+                &[],
+            )
+            .map_err(|e| Error::msg(e.to_string()))?)
     }
 
     #[allow(dead_code)]
     pub fn delegate_withdrawal(
         &mut self,
-        executor: &str,
+        executor: &Addr,
         delegated: &str,
     ) -> AnyResult<AppResponse> {
-        self.app.execute_contract(
-            Addr::unchecked(executor),
-            self.stake_contract.clone(),
-            &ExecuteMsg::DelegateWithdrawal {
-                delegated: delegated.to_owned(),
-            },
-            &[],
-        )
+        Ok(self
+            .app
+            .execute_contract(
+                executor.to_owned(),
+                self.stake_contract.clone(),
+                &ExecuteMsg::DelegateWithdrawal {
+                    delegated: delegated.to_owned(),
+                },
+                &[],
+            )
+            .map_err(|e| Error::msg(e.to_string()))?)
     }
 
-    pub fn withdrawable_rewards(&self, owner: &str) -> StdResult<Vec<AssetValidated>> {
+    pub fn withdrawable_rewards(&self, owner: &Addr) -> StdResult<Vec<AssetValidated>> {
         let resp: WithdrawableRewardsResponse = self.app.wrap().query_wasm_smart(
             self.stake_contract.clone(),
             &QueryMsg::WithdrawableRewards {
-                owner: owner.to_owned(),
+                owner: owner.to_string(),
             },
         )?;
         Ok(resp.rewards)
@@ -637,41 +702,41 @@ impl Suite {
     }
 
     #[allow(dead_code)]
-    pub fn delegated(&self, owner: &str) -> StdResult<Addr> {
+    pub fn delegated(&self, owner: &Addr) -> StdResult<Addr> {
         let resp: DelegatedResponse = self.app.wrap().query_wasm_smart(
             self.stake_contract.clone(),
             &QueryMsg::Delegated {
-                owner: owner.to_owned(),
+                owner: owner.to_string(),
             },
         )?;
         Ok(resp.delegated)
     }
 
     /// returns address' balance of native token
-    pub fn query_balance(&self, address: &str, denom: &str) -> StdResult<u128> {
+    pub fn query_balance(&self, address: &Addr, denom: &str) -> StdResult<u128> {
         let resp = self.app.wrap().query_balance(address, denom)?;
-        Ok(resp.amount.u128())
+        Ok(Uint128::try_from(resp.amount).unwrap().u128())
     }
 
-    pub fn query_cw20_balance(&self, address: &str, cw20: impl Into<String>) -> StdResult<u128> {
+    pub fn query_cw20_balance(&self, address: &Addr, cw20: impl Into<String>) -> StdResult<u128> {
         let balance: BalanceResponse = self.app.wrap().query_wasm_smart(
             cw20,
             &Cw20QueryMsg::Balance {
-                address: address.to_owned(),
+                address: address.to_string(),
             },
         )?;
-        Ok(balance.balance.u128())
+        Ok(Uint128::try_from(balance.balance).unwrap().u128())
     }
 
     // returns address' balance on vesting contract
-    pub fn query_balance_vesting_contract(&self, address: &str) -> StdResult<u128> {
+    pub fn query_balance_vesting_contract(&self, address: &Addr) -> StdResult<u128> {
         let balance: BalanceResponse = self.app.wrap().query_wasm_smart(
             self.token_contract.clone(),
             &Cw20QueryMsg::Balance {
-                address: address.to_owned(),
+                address: address.to_string(),
             },
         )?;
-        Ok(balance.balance.u128())
+        Ok(Uint128::try_from(balance.balance).unwrap().u128())
     }
 
     // returns address' balance on vesting contract
@@ -682,22 +747,22 @@ impl Suite {
                 address: self.stake_contract.to_string(),
             },
         )?;
-        Ok(balance.balance.u128())
+        Ok(Uint128::try_from(balance.balance).unwrap().u128())
     }
 
     pub fn query_staked(
         &self,
-        address: &str,
+        address: &Addr,
         unbonding_period: impl Into<Option<u64>>,
     ) -> StdResult<u128> {
         let staked: StakedResponse = self.app.wrap().query_wasm_smart(
             self.stake_contract.clone(),
             &QueryMsg::Staked {
-                address: address.to_owned(),
+                address: address.to_string(),
                 unbonding_period: self.unbonding_period_or_default(unbonding_period),
             },
         )?;
-        Ok(staked.stake.u128())
+        Ok(Uint128::try_from(staked.stake).unwrap().u128())
     }
 
     pub fn query_staked_periods(&self) -> StdResult<Vec<BondingPeriodInfo>> {
@@ -708,11 +773,11 @@ impl Suite {
         Ok(info.bonding)
     }
 
-    pub fn query_all_staked(&self, address: &str) -> StdResult<AllStakedResponse> {
+    pub fn query_all_staked(&self, address: &Addr) -> StdResult<AllStakedResponse> {
         let all_staked: AllStakedResponse = self.app.wrap().query_wasm_smart(
             self.stake_contract.clone(),
             &QueryMsg::AllStaked {
-                address: address.to_owned(),
+                address: address.to_string(),
             },
         )?;
         Ok(all_staked)
@@ -723,14 +788,14 @@ impl Suite {
             .app
             .wrap()
             .query_wasm_smart(self.stake_contract.clone(), &QueryMsg::TotalStaked {})?;
-        Ok(total_staked.total_staked.u128())
+        Ok(Uint128::try_from(total_staked.total_staked).unwrap().u128())
     }
 
-    pub fn query_claims(&self, address: &str) -> StdResult<Vec<Claim>> {
+    pub fn query_claims(&self, address: &Addr) -> StdResult<Vec<Claim>> {
         let claims: ClaimsResponse = self.app.wrap().query_wasm_smart(
             self.stake_contract.clone(),
             &QueryMsg::Claims {
-                address: address.to_owned(),
+                address: address.to_string(),
             },
         )?;
         Ok(claims.claims)
@@ -746,18 +811,21 @@ impl Suite {
         Ok(apr.rewards)
     }
 
-    pub fn query_rewards_power(&self, address: &str) -> StdResult<Vec<(AssetInfoValidated, u128)>> {
+    pub fn query_rewards_power(
+        &self,
+        address: &Addr,
+    ) -> StdResult<Vec<(AssetInfoValidated, u128)>> {
         let rewards: RewardsPowerResponse = self.app.wrap().query_wasm_smart(
             self.stake_contract.clone(),
             &QueryMsg::RewardsPower {
-                address: address.to_owned(),
+                address: address.to_string(),
             },
         )?;
 
         Ok(rewards
             .rewards
             .into_iter()
-            .map(|(a, p)| (a, p.u128()))
+            .map(|(a, p)| (a, Uint128::try_from(p).unwrap().u128()))
             .filter(|(_, p)| *p > 0)
             .collect())
     }
@@ -771,7 +839,7 @@ impl Suite {
         Ok(rewards
             .rewards
             .into_iter()
-            .map(|(a, p)| (a, p.u128()))
+            .map(|(a, p)| (a, Uint128::try_from(p).unwrap().u128()))
             .filter(|(_, p)| *p > 0)
             .collect())
     }

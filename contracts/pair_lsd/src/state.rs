@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, Decimal, DepsMut, StdResult, Storage, Uint128};
+use cosmwasm_std::{Addr, Decimal256, DepsMut, StdResult, Storage, Uint256};
 use cw_storage_plus::{Item, Map};
 use wyndex::asset::AssetInfoValidated;
 use wyndex::common::OwnershipProposal;
@@ -27,7 +27,7 @@ pub struct Config {
     /// The greatest precision of assets in the pool
     pub greatest_precision: u8,
     /// The vector contains cumulative prices for each pair of assets in the pool
-    pub cumulative_prices: Vec<(AssetInfoValidated, AssetInfoValidated, Uint128)>,
+    pub cumulative_prices: Vec<(AssetInfoValidated, AssetInfoValidated, Uint256)>,
     /// The block time until which trading is disabled
     pub trading_starts: u64,
 
@@ -35,10 +35,10 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn target_rate(&self) -> Decimal {
+    pub fn target_rate(&self) -> Decimal256 {
         match &self.lsd {
             Some(lsd) => lsd.target_rate,
-            None => Decimal::one(),
+            None => Decimal256::one(),
         }
     }
 
@@ -59,7 +59,7 @@ pub struct LsdData {
     pub lsd_hub: Addr,
     /// The target rate to concentrate liquidity around. Defaults to `1.0`.
     /// If `lsd_hub` is set, this is updated once per `target_rate_epoch`.
-    pub target_rate: Decimal,
+    pub target_rate: Decimal256,
     /// The minimum amount of time in seconds between two target value queries
     pub target_rate_epoch: u64,
     /// The last timestamp when the target value was queried

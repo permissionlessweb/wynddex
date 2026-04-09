@@ -7,10 +7,7 @@ use crate::pair::{
     PairInfo, QueryMsg as PairQueryMsg, ReverseSimulationResponse, SimulationResponse,
 };
 
-use cosmwasm_std::{
-    Addr, AllBalanceResponse, BankQuery, Coin, Decimal, QuerierWrapper, QueryRequest, StdResult,
-    Uint128,
-};
+use cosmwasm_std::{Addr, Decimal256, QuerierWrapper, StdError, StdResult, Uint256};
 
 use cw20::{BalanceResponse as Cw20BalanceResponse, Cw20QueryMsg, TokenInfoResponse};
 
@@ -24,22 +21,12 @@ pub fn query_balance(
     querier: &QuerierWrapper,
     account_addr: impl Into<String>,
     denom: impl Into<String>,
-) -> StdResult<Uint128> {
-    querier
-        .query_balance(account_addr, denom)
-        .map(|coin| coin.amount)
+) -> StdResult<Uint256> {
+    let coin = querier.query_balance(account_addr, denom)?;
+    Uint256::try_from(coin.amount).map_err(|e| StdError::msg(e.to_string()))
 }
 
-/// Returns the total balances for all coins at a specified account address.
-///
-/// * **account_addr** address for which we query balances.
-pub fn query_all_balances(querier: &QuerierWrapper, account_addr: Addr) -> StdResult<Vec<Coin>> {
-    let all_balances: AllBalanceResponse =
-        querier.query(&QueryRequest::Bank(BankQuery::AllBalances {
-            address: String::from(account_addr),
-        }))?;
-    Ok(all_balances.amount)
-}
+// query_all_balances removed - AllBalanceResponse/BankQuery::AllBalances removed in cosmwasm v3
 
 /// Returns a token balance for an account.
 ///
@@ -50,7 +37,7 @@ pub fn query_token_balance(
     querier: &QuerierWrapper,
     contract_addr: impl Into<String>,
     account_addr: impl Into<String>,
-) -> StdResult<Uint128> {
+) -> StdResult<Uint256> {
     // load balance from the token contract
     let resp: Cw20BalanceResponse = querier
         .query_wasm_smart(
@@ -60,10 +47,10 @@ pub fn query_token_balance(
             },
         )
         .unwrap_or_else(|_| Cw20BalanceResponse {
-            balance: Uint128::zero(),
+            balance: Uint256::zero(),
         });
 
-    Ok(resp.balance)
+    Uint256::try_from(resp.balance).map_err(|e| StdError::msg(e.to_string()))
 }
 
 /// Returns a token's symbol.
@@ -85,11 +72,11 @@ pub fn query_token_symbol(
 pub fn query_supply(
     querier: &QuerierWrapper,
     contract_addr: impl Into<String>,
-) -> StdResult<Uint128> {
+) -> StdResult<Uint256> {
     let res: TokenInfoResponse =
         querier.query_wasm_smart(contract_addr, &Cw20QueryMsg::TokenInfo {})?;
 
-    Ok(res.total_supply)
+    Uint256::try_from(res.total_supply).map_err(|e| StdError::msg(e.to_string()))
 }
 
 /// Returns the number of decimals that a token has.
@@ -125,9 +112,9 @@ pub struct FeeInfo {
     /// The fee address
     pub fee_address: Option<Addr>,
     /// The total amount of fees charged per swap
-    pub total_fee_rate: Decimal,
+    pub total_fee_rate: Decimal256,
     /// The amount of fees sent to the protocol
-    pub protocol_fee_rate: Decimal,
+    pub protocol_fee_rate: Decimal256,
 }
 
 /// Returns the fee information for a specific pair type.
@@ -143,8 +130,8 @@ pub fn query_fee_info(
 
     Ok(FeeInfo {
         fee_address: res.fee_address,
-        total_fee_rate: Decimal::from_ratio(res.total_fee_bps, 10000u16),
-        protocol_fee_rate: Decimal::from_ratio(res.protocol_fee_bps, 10000u16),
+        total_fee_rate: Decimal256::from_ratio(res.total_fee_bps, 10000u16),
+        protocol_fee_rate: Decimal256::from_ratio(res.protocol_fee_bps, 10000u16),
     })
 }
 

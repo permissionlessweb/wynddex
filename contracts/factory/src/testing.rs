@@ -1,8 +1,9 @@
 use cosmwasm_std::{
-    attr, from_json, to_json_binary, Addr, Binary, Decimal, ReplyOn, SubMsg, Uint128, WasmMsg,
+    attr, from_json, to_json_binary, Addr, Binary, Decimal256, ReplyOn, SubMsg, Uint256, WasmMsg,
 };
 use cw_utils::MsgInstantiateContractResponse;
 use wyndex::fee_config::FeeConfig;
+use wyndex_test_helpers::TestAccounts;
 
 use crate::mock_querier::mock_dependencies;
 use crate::state::CONFIG;
@@ -18,18 +19,23 @@ use wyndex::factory::{
 use wyndex::pair::PairInfo;
 
 use crate::contract::reply;
-use cosmwasm_std::testing::{mock_env, mock_info, MOCK_CONTRACT_ADDR};
+use cosmwasm_std::testing::{message_info, mock_env, MockApi, MOCK_CONTRACT_ADDR};
 use wyndex::pair::InstantiateMsg as PairInstantiateMsg;
 
 fn default_stake_config() -> DefaultStakeConfig {
     DefaultStakeConfig {
         staking_code_id: 1234u64,
-        tokens_per_power: Uint128::new(1000),
-        min_bond: Uint128::new(1000),
+        tokens_per_power: Uint256::from(1000u128),
+        min_bond: Uint256::from(1000u128),
         unbonding_periods: vec![1],
         max_distributions: 6,
         converter: None,
     }
+}
+
+fn default_accounts() -> [Addr; 1] {
+    let d = mock_dependencies(&[]);
+    [d.api.addr_make("owner0000")]
 }
 
 #[test]
@@ -43,7 +49,8 @@ fn pair_type_to_string() {
 fn proper_initialization() {
     // Validate total and protocol fee bps
     let mut deps = mock_dependencies(&[]);
-    let owner = "owner0000".to_string();
+    let owner = default_accounts();
+    let owner = &owner[0];
 
     let msg = InstantiateMsg {
         pair_configs: vec![
@@ -68,14 +75,14 @@ fn proper_initialization() {
         ],
         token_code_id: 123u64,
         fee_address: None,
-        owner: owner.clone(),
-        max_referral_commission: Decimal::one(),
+        owner: owner.to_string(),
+        max_referral_commission: Decimal256::one(),
         default_stake_config: default_stake_config(),
         trading_starts: None,
     };
 
     let env = mock_env();
-    let info = mock_info("addr0000", &[]);
+    let info = message_info(&owner, &[]);
 
     let res = instantiate(deps.as_mut(), env, info, msg).unwrap_err();
     assert_eq!(res, ContractError::PairConfigDuplicate {});
@@ -92,14 +99,14 @@ fn proper_initialization() {
         }],
         token_code_id: 123u64,
         fee_address: None,
-        owner: owner.clone(),
-        max_referral_commission: Decimal::one(),
+        owner: owner.to_string(),
+        max_referral_commission: Decimal256::one(),
         default_stake_config: default_stake_config(),
         trading_starts: None,
     };
 
     let env = mock_env();
-    let info = mock_info("addr0000", &[]);
+    let info = message_info(&owner, &[]);
 
     let res = instantiate(deps.as_mut(), env, info, msg).unwrap_err();
     assert_eq!(res, ContractError::PairConfigInvalidFeeBps {});
@@ -129,14 +136,14 @@ fn proper_initialization() {
         ],
         token_code_id: 123u64,
         fee_address: None,
-        owner: owner.clone(),
-        max_referral_commission: Decimal::one(),
+        owner: owner.to_string(),
+        max_referral_commission: Decimal256::one(),
         default_stake_config: default_stake_config(),
         trading_starts: None,
     };
 
     let env = mock_env();
-    let info = mock_info("addr0000", &[]);
+    let info = message_info(&owner, &[]);
 
     instantiate(deps.as_mut(), env.clone(), info, msg.clone()).unwrap();
 
@@ -144,23 +151,24 @@ fn proper_initialization() {
     let config_res: ConfigResponse = from_json(&query_res).unwrap();
     assert_eq!(123u64, config_res.token_code_id);
     assert_eq!(msg.pair_configs, config_res.pair_configs);
-    assert_eq!(Addr::unchecked(owner), config_res.owner);
+    assert_eq!(owner, config_res.owner);
 }
 
 #[test]
 fn trading_starts_validation() {
     let mut deps = mock_dependencies(&[]);
     let env = mock_env();
-    let info = mock_info("addr0000", &[]);
+    let addr0000 = MockApi::default().addr_make("addr0000");
+    let info = message_info(&addr0000, &[]);
 
-    let owner = "owner";
+    let owner = MockApi::default().addr_make("owner").to_string();
 
     let mut msg = InstantiateMsg {
         pair_configs: vec![],
         token_code_id: 123u64,
         fee_address: None,
         owner: owner.to_string(),
-        max_referral_commission: Decimal::one(),
+        max_referral_commission: Decimal256::one(),
         default_stake_config: default_stake_config(),
         trading_starts: None,
     };
@@ -188,7 +196,10 @@ fn trading_starts_validation() {
 #[test]
 fn update_config() {
     let mut deps = mock_dependencies(&[]);
-    let owner = "owner0000";
+    let a = TestAccounts::new(&deps.api);
+    let addr0000 = a.whale;
+    let new_fee_addr = a.beneficiary;
+    let owner = a.owner;
 
     let pair_configs = vec![PairConfig {
         code_id: 123u64,
@@ -205,23 +216,23 @@ fn update_config() {
         token_code_id: 123u64,
         fee_address: None,
         owner: owner.to_string(),
-        max_referral_commission: Decimal::one(),
+        max_referral_commission: Decimal256::one(),
         default_stake_config: default_stake_config(),
         trading_starts: None,
     };
 
     let env = mock_env();
-    let info = mock_info(owner, &[]);
+    let info = message_info(&owner, &[]);
 
     // We can just call .unwrap() to assert this was a success
     let _res = instantiate(deps.as_mut(), env, info, msg).unwrap();
 
     // Update config
     let env = mock_env();
-    let info = mock_info(owner, &[]);
+    let info = message_info(&owner, &[]);
     let msg = ExecuteMsg::UpdateConfig {
         token_code_id: Some(200u64),
-        fee_address: Some(String::from("new_fee_addr")),
+        fee_address: Some(new_fee_addr.to_string()),
         only_owner_can_create_pairs: Some(true),
         default_stake_config: None,
     };
@@ -233,12 +244,15 @@ fn update_config() {
     let query_res = query(deps.as_ref(), env, QueryMsg::Config {}).unwrap();
     let config_res: ConfigResponse = from_json(&query_res).unwrap();
     assert_eq!(200u64, config_res.token_code_id);
-    assert_eq!(owner, config_res.owner.as_str());
-    assert_eq!("new_fee_addr", config_res.fee_address.unwrap().as_str());
+    assert_eq!(owner.as_str(), config_res.owner.as_str());
+    assert_eq!(
+        new_fee_addr.as_str(),
+        config_res.fee_address.unwrap().as_str()
+    );
 
     // Unauthorized err
     let env = mock_env();
-    let info = mock_info("addr0000", &[]);
+    let info = message_info(&addr0000, &[]);
     let msg = ExecuteMsg::UpdateConfig {
         token_code_id: None,
         fee_address: None,
@@ -253,41 +267,41 @@ fn update_config() {
 #[test]
 fn update_owner() {
     let mut deps = mock_dependencies(&[]);
-    let owner = "owner0000";
+    let owner = MockApi::default().addr_make("owner0000");
 
     let msg = InstantiateMsg {
         pair_configs: vec![],
         token_code_id: 123u64,
         fee_address: None,
         owner: owner.to_string(),
-        max_referral_commission: Decimal::one(),
+        max_referral_commission: Decimal256::one(),
         default_stake_config: default_stake_config(),
         trading_starts: None,
     };
 
     let env = mock_env();
-    let info = mock_info(owner, &[]);
+    let info = message_info(&owner, &[]);
 
     // We can just call .unwrap() to assert this was a success
     instantiate(deps.as_mut(), env, info, msg).unwrap();
 
-    let new_owner = String::from("new_owner");
+    let new_owner = MockApi::default().addr_make("new_owner");
 
     // New owner
     let env = mock_env();
     let msg = ExecuteMsg::ProposeNewOwner {
-        owner: new_owner.clone(),
+        owner: new_owner.to_string(),
         expires_in: 100, // seconds
     };
 
-    let info = mock_info(new_owner.as_str(), &[]);
+    let info = message_info(&new_owner, &[]);
 
     // Unauthorized check
     let err = execute(deps.as_mut(), env.clone(), info, msg.clone()).unwrap_err();
-    assert_eq!(err.to_string(), "Generic error: Unauthorized");
+    assert!(err.to_string().contains("Unauthorized"));
 
     // Claim before proposal
-    let info = mock_info(new_owner.as_str(), &[]);
+    let info = message_info(&new_owner, &[]);
     execute(
         deps.as_mut(),
         env.clone(),
@@ -297,12 +311,12 @@ fn update_owner() {
     .unwrap_err();
 
     // Propose new owner
-    let info = mock_info(owner, &[]);
+    let info = message_info(&owner, &[]);
     let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
     assert_eq!(0, res.messages.len());
 
     // Unauthorized ownership claim
-    let info = mock_info("invalid_addr", &[]);
+    let info = message_info(&Addr::unchecked("invalid_addr"), &[]);
     let err = execute(
         deps.as_mut(),
         env.clone(),
@@ -310,10 +324,10 @@ fn update_owner() {
         ExecuteMsg::ClaimOwnership {},
     )
     .unwrap_err();
-    assert_eq!(err.to_string(), "Generic error: Unauthorized");
+    assert!(err.to_string().contains("Unauthorized"));
 
     // Claim ownership
-    let info = mock_info(new_owner.as_str(), &[]);
+    let info = message_info(&new_owner, &[]);
     let res = execute(
         deps.as_mut(),
         env.clone(),
@@ -326,13 +340,16 @@ fn update_owner() {
     // Let's query the state
     let config: ConfigResponse =
         from_json(&query(deps.as_ref(), env, QueryMsg::Config {}).unwrap()).unwrap();
-    assert_eq!(new_owner, config.owner.as_str());
+    assert_eq!(new_owner.as_str(), config.owner.as_str());
 }
 
 #[test]
 fn update_pair_config() {
     let mut deps = mock_dependencies(&[]);
-    let owner = "owner0000";
+    let a = TestAccounts::new(&deps.api);
+    let addr0000 = a.whale;
+
+    let owner = a.owner;
     let pair_configs = vec![PairConfig {
         code_id: 123u64,
         pair_type: PairType::Xyk {},
@@ -348,13 +365,13 @@ fn update_pair_config() {
         token_code_id: 123u64,
         fee_address: None,
         owner: owner.to_string(),
-        max_referral_commission: Decimal::one(),
+        max_referral_commission: Decimal256::one(),
         default_stake_config: default_stake_config(),
         trading_starts: None,
     };
 
     let env = mock_env();
-    let info = mock_info("addr0000", &[]);
+    let info = message_info(&addr0000, &[]);
 
     // We can just call .unwrap() to assert this was a success
     instantiate(deps.as_mut(), env.clone(), info, msg).unwrap();
@@ -377,7 +394,7 @@ fn update_pair_config() {
 
     // Unauthorized err
     let env = mock_env();
-    let info = mock_info("wrong-addr0000", &[]);
+    let info = message_info(&Addr::unchecked("wrong-addr0000"), &[]);
     let msg = ExecuteMsg::UpdatePairConfig {
         config: pair_config.clone(),
     };
@@ -387,7 +404,7 @@ fn update_pair_config() {
 
     // Check validation of total and protocol fee bps
     let env = mock_env();
-    let info = mock_info(owner, &[]);
+    let info = message_info(&owner, &[]);
     let msg = ExecuteMsg::UpdatePairConfig {
         config: PairConfig {
             code_id: 123u64,
@@ -403,7 +420,7 @@ fn update_pair_config() {
     let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap_err();
     assert_eq!(res, ContractError::PairConfigInvalidFeeBps {});
 
-    let info = mock_info(owner, &[]);
+    let info = message_info(&owner, &[]);
     let msg = ExecuteMsg::UpdatePairConfig {
         config: pair_config.clone(),
     };
@@ -427,7 +444,7 @@ fn update_pair_config() {
         is_disabled: false,
     };
 
-    let info = mock_info(owner, &[]);
+    let info = message_info(&owner, &[]);
     let msg = ExecuteMsg::UpdatePairConfig {
         config: pair_config_custom.clone(),
     };
@@ -457,30 +474,34 @@ fn create_pair() {
         is_disabled: false,
     };
 
+    let owner0000 = MockApi::default().addr_make("owner0000");
     let msg = InstantiateMsg {
         pair_configs: vec![pair_config.clone()],
         token_code_id: 123u64,
         fee_address: None,
-        owner: "owner0000".to_string(),
-        max_referral_commission: Decimal::one(),
+        owner: owner0000.to_string(),
+        max_referral_commission: Decimal256::one(),
         default_stake_config: default_stake_config(),
         trading_starts: None,
     };
 
     let env = mock_env();
-    let info = mock_info("addr0000", &[]);
+    let addr0000 = MockApi::default().addr_make("addr0000");
+    let info = message_info(&addr0000, &[]);
 
     // We can just call .unwrap() to assert this was a success
     let _res = instantiate(deps.as_mut(), env, info, msg.clone()).unwrap();
 
+    let asset0000 = MockApi::default().addr_make("asset0000").to_string();
+    let asset0001 = MockApi::default().addr_make("asset0001").to_string();
     let asset_infos = vec![
-        AssetInfo::Token("asset0000".to_string()),
-        AssetInfo::Token("asset0001".to_string()),
+        AssetInfo::Token(asset0000.clone()),
+        AssetInfo::Token(asset0001.clone()),
     ];
 
     let config = CONFIG.load(&deps.storage);
     let env = mock_env();
-    let info = mock_info("owner0000", &[]);
+    let info = message_info(&owner0000, &[]);
 
     // Check pair creation using a non-whitelisted pair ID
     let res = execute(
@@ -516,7 +537,7 @@ fn create_pair() {
         res.attributes,
         vec![
             attr("action", "create_pair"),
-            attr("pair", "asset0000-asset0001")
+            attr("pair", format!("{}-{}", asset0000, asset0001))
         ]
     );
     assert_eq!(
@@ -524,7 +545,7 @@ fn create_pair() {
         vec![SubMsg {
             msg: WasmMsg::Instantiate {
                 msg: to_json_binary(&PairInstantiateMsg {
-                    factory_addr: String::from(MOCK_CONTRACT_ADDR),
+                    factory_addr: MOCK_CONTRACT_ADDR.to_string(),
                     asset_infos,
                     token_code_id: msg.token_code_id,
                     init_params: None,
@@ -551,7 +572,7 @@ fn create_pair() {
 #[test]
 fn register() {
     let mut deps = mock_dependencies(&[]);
-    let owner = "owner0000";
+    let owner = MockApi::default().addr_make("owner0000");
 
     let msg = InstantiateMsg {
         pair_configs: vec![PairConfig {
@@ -566,18 +587,22 @@ fn register() {
         token_code_id: 123u64,
         fee_address: None,
         owner: owner.to_string(),
-        max_referral_commission: Decimal::one(),
+        max_referral_commission: Decimal256::one(),
         default_stake_config: default_stake_config(),
         trading_starts: None,
     };
 
     let env = mock_env();
-    let info = mock_info("addr0000", &[]);
+    let addr0000 = MockApi::default().addr_make("addr0000");
+    let info = message_info(&addr0000, &[]);
     let _res = instantiate(deps.as_mut(), env, info, msg).unwrap();
 
+    let asset0000 = MockApi::default().addr_make("asset0000").to_string();
+    let asset0001 = MockApi::default().addr_make("asset0001").to_string();
+    let asset0002 = MockApi::default().addr_make("asset0002").to_string();
     let asset_infos = vec![
-        AssetInfo::Token("asset0000".to_string()),
-        AssetInfo::Token("asset0001".to_string()),
+        AssetInfo::Token(asset0000.clone()),
+        AssetInfo::Token(asset0001.clone()),
     ];
 
     let msg = ExecuteMsg::CreatePair {
@@ -589,10 +614,13 @@ fn register() {
     };
 
     let env = mock_env();
-    let info = mock_info(owner, &[]);
+    let info = message_info(&owner, &[]);
     let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
-    let pair0_addr = "pair0000".to_string();
+    let pair0000 = MockApi::default().addr_make("pair0000");
+    let stake0000 = MockApi::default().addr_make("stake0000");
+    let liquidity0000 = MockApi::default().addr_make("liquidity0000");
+    let pair0_addr = pair0000.to_string();
     let validated_asset_infos: Vec<_> = asset_infos
         .iter()
         .cloned()
@@ -600,9 +628,9 @@ fn register() {
         .collect();
     let pair0_info = PairInfo {
         asset_infos: validated_asset_infos.clone(),
-        contract_addr: Addr::unchecked("pair0000"),
-        staking_addr: Addr::unchecked("stake0000"),
-        liquidity_token: Addr::unchecked("liquidity0000"),
+        contract_addr: pair0000.clone(),
+        staking_addr: stake0000.clone(),
+        liquidity_token: liquidity0000.clone(),
         pair_type: PairType::Xyk {},
         fee_config: FeeConfig {
             total_fee_bps: 0,
@@ -616,7 +644,7 @@ fn register() {
     deps.querier.with_wyndex_pairs(&deployed_pairs);
 
     let instantiate_res = MsgInstantiateContractResponse {
-        contract_address: String::from("pair0000"),
+        contract_address: pair0000.to_string(),
         data: None,
     };
 
@@ -635,9 +663,9 @@ fn register() {
     assert_eq!(
         pair_res,
         PairInfo {
-            liquidity_token: Addr::unchecked("liquidity0000"),
-            contract_addr: Addr::unchecked("pair0000"),
-            staking_addr: Addr::unchecked("stake0000"),
+            liquidity_token: liquidity0000.clone(),
+            contract_addr: pair0000.clone(),
+            staking_addr: stake0000.clone(),
             asset_infos: validated_asset_infos.clone(),
             pair_type: PairType::Xyk {},
             fee_config: FeeConfig {
@@ -653,8 +681,8 @@ fn register() {
 
     // Store one more item to test query pairs
     let asset_infos_2 = vec![
-        AssetInfo::Token("asset0000".to_string()),
-        AssetInfo::Token("asset0002".to_string()),
+        AssetInfo::Token(asset0000.clone()),
+        AssetInfo::Token(asset0002.clone()),
     ];
     let validated_asset_infos_2: Vec<_> = asset_infos_2
         .iter()
@@ -671,15 +699,18 @@ fn register() {
     };
 
     let env = mock_env();
-    let info = mock_info(owner, &[]);
+    let info = message_info(&owner, &[]);
     let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
-    let pair1_addr = "pair0001".to_string();
+    let pair0001 = MockApi::default().addr_make("pair0001");
+    let stake0001 = MockApi::default().addr_make("stake0001");
+    let liquidity0001 = MockApi::default().addr_make("liquidity0001");
+    let pair1_addr = pair0001.to_string();
     let pair1_info = PairInfo {
         asset_infos: validated_asset_infos_2.clone(),
-        contract_addr: Addr::unchecked("pair0001"),
-        staking_addr: Addr::unchecked("stake0001"),
-        liquidity_token: Addr::unchecked("liquidity0001"),
+        contract_addr: pair0001.clone(),
+        staking_addr: stake0001.clone(),
+        liquidity_token: liquidity0001.clone(),
         pair_type: PairType::Xyk {},
         fee_config: FeeConfig {
             total_fee_bps: 0,
@@ -693,7 +724,7 @@ fn register() {
     deps.querier.with_wyndex_pairs(&deployed_pairs);
 
     let instantiate_res = MsgInstantiateContractResponse {
-        contract_address: String::from("pair0001"),
+        contract_address: pair0001.to_string(),
         data: None,
     };
 
@@ -706,33 +737,93 @@ fn register() {
 
     let res = query(deps.as_ref(), env.clone(), query_msg).unwrap();
     let pairs_res: PairsResponse = from_json(&res).unwrap();
-    assert_eq!(
-        pairs_res.pairs,
-        vec![
-            PairInfo {
-                liquidity_token: Addr::unchecked("liquidity0000"),
-                contract_addr: Addr::unchecked("pair0000"),
-                staking_addr: Addr::unchecked("stake0000"),
-                asset_infos: validated_asset_infos.clone(),
-                pair_type: PairType::Xyk {},
-                fee_config: FeeConfig {
-                    total_fee_bps: 0,
-                    protocol_fee_bps: 0,
+    assert_eq!(pairs_res.pairs.len(), 2);
+    assert!(pairs_res.pairs.contains(&PairInfo {
+        liquidity_token: liquidity0000.clone(),
+        contract_addr: pair0000.clone(),
+        staking_addr: stake0000.clone(),
+        asset_infos: validated_asset_infos.clone(),
+        pair_type: PairType::Xyk {},
+        fee_config: FeeConfig {
+            total_fee_bps: 0,
+            protocol_fee_bps: 0,
+        },
+    }));
+    assert!(pairs_res.pairs.contains(&PairInfo {
+        liquidity_token: liquidity0001.clone(),
+        contract_addr: pair0001.clone(),
+        staking_addr: stake0001.clone(),
+        asset_infos: validated_asset_infos_2.clone(),
+        pair_type: PairType::Xyk {},
+        fee_config: FeeConfig {
+            total_fee_bps: 0,
+            protocol_fee_bps: 0,
+        },
+    }));
+
+    // Determine which pair sorts first in PAIRS storage to test limit and start_after
+    let (first_pair_info, second_pair_info) = {
+        let first = &pairs_res.pairs[0];
+        if first.contract_addr == pair0000 {
+            (
+                PairInfo {
+                    liquidity_token: liquidity0000.clone(),
+                    contract_addr: pair0000.clone(),
+                    staking_addr: stake0000.clone(),
+                    asset_infos: validated_asset_infos.clone(),
+                    pair_type: PairType::Xyk {},
+                    fee_config: FeeConfig {
+                        total_fee_bps: 0,
+                        protocol_fee_bps: 0,
+                    },
                 },
-            },
-            PairInfo {
-                liquidity_token: Addr::unchecked("liquidity0001"),
-                contract_addr: Addr::unchecked("pair0001"),
-                staking_addr: Addr::unchecked("stake0001"),
-                asset_infos: validated_asset_infos_2.clone(),
-                pair_type: PairType::Xyk {},
-                fee_config: FeeConfig {
-                    total_fee_bps: 0,
-                    protocol_fee_bps: 0,
+                PairInfo {
+                    liquidity_token: liquidity0001.clone(),
+                    contract_addr: pair0001.clone(),
+                    staking_addr: stake0001.clone(),
+                    asset_infos: validated_asset_infos_2.clone(),
+                    pair_type: PairType::Xyk {},
+                    fee_config: FeeConfig {
+                        total_fee_bps: 0,
+                        protocol_fee_bps: 0,
+                    },
                 },
-            }
-        ]
-    );
+            )
+        } else {
+            (
+                PairInfo {
+                    liquidity_token: liquidity0001.clone(),
+                    contract_addr: pair0001.clone(),
+                    staking_addr: stake0001.clone(),
+                    asset_infos: validated_asset_infos_2.clone(),
+                    pair_type: PairType::Xyk {},
+                    fee_config: FeeConfig {
+                        total_fee_bps: 0,
+                        protocol_fee_bps: 0,
+                    },
+                },
+                PairInfo {
+                    liquidity_token: liquidity0000.clone(),
+                    contract_addr: pair0000.clone(),
+                    staking_addr: stake0000.clone(),
+                    asset_infos: validated_asset_infos.clone(),
+                    pair_type: PairType::Xyk {},
+                    fee_config: FeeConfig {
+                        total_fee_bps: 0,
+                        protocol_fee_bps: 0,
+                    },
+                },
+            )
+        }
+    };
+    let first_asset_infos_unvalidated: Vec<AssetInfo> = first_pair_info
+        .asset_infos
+        .iter()
+        .map(|a| match a {
+            wyndex::asset::AssetInfoValidated::Token(addr) => AssetInfo::Token(addr.to_string()),
+            wyndex::asset::AssetInfoValidated::Native(denom) => AssetInfo::Native(denom.clone()),
+        })
+        .collect();
 
     let query_msg = QueryMsg::Pairs {
         start_after: None,
@@ -741,46 +832,20 @@ fn register() {
 
     let res = query(deps.as_ref(), env.clone(), query_msg).unwrap();
     let pairs_res: PairsResponse = from_json(&res).unwrap();
-    assert_eq!(
-        pairs_res.pairs,
-        vec![PairInfo {
-            liquidity_token: Addr::unchecked("liquidity0000"),
-            contract_addr: Addr::unchecked("pair0000"),
-            staking_addr: Addr::unchecked("stake0000"),
-            asset_infos: validated_asset_infos.clone(),
-            pair_type: PairType::Xyk {},
-            fee_config: FeeConfig {
-                total_fee_bps: 0,
-                protocol_fee_bps: 0,
-            },
-        }]
-    );
+    assert_eq!(pairs_res.pairs, vec![first_pair_info]);
 
     let query_msg = QueryMsg::Pairs {
-        start_after: Some(asset_infos),
+        start_after: Some(first_asset_infos_unvalidated),
         limit: None,
     };
 
     let res = query(deps.as_ref(), env, query_msg).unwrap();
     let pairs_res: PairsResponse = from_json(&res).unwrap();
-    assert_eq!(
-        pairs_res.pairs,
-        vec![PairInfo {
-            liquidity_token: Addr::unchecked("liquidity0001"),
-            contract_addr: Addr::unchecked("pair0001"),
-            staking_addr: Addr::unchecked("stake0001"),
-            asset_infos: validated_asset_infos_2,
-            pair_type: PairType::Xyk {},
-            fee_config: FeeConfig {
-                total_fee_bps: 0,
-                protocol_fee_bps: 0,
-            },
-        }]
-    );
+    assert_eq!(pairs_res.pairs, vec![second_pair_info]);
 
     // Deregister from wrong acc
     let env = mock_env();
-    let info = mock_info("wrong_addr0000", &[]);
+    let info = message_info(&Addr::unchecked("wrong_addr0000"), &[]);
     let res = execute(
         deps.as_mut(),
         env,
@@ -795,7 +860,7 @@ fn register() {
 
     // Proper deregister
     let env = mock_env();
-    let info = mock_info(owner, &[]);
+    let info = message_info(&owner, &[]);
     let res = execute(
         deps.as_mut(),
         env.clone(),
@@ -818,9 +883,9 @@ fn register() {
     assert_eq!(
         pairs_res.pairs,
         vec![PairInfo {
-            liquidity_token: Addr::unchecked("liquidity0000"),
-            contract_addr: Addr::unchecked("pair0000"),
-            staking_addr: Addr::unchecked("stake0000"),
+            liquidity_token: liquidity0000,
+            contract_addr: pair0000,
+            staking_addr: stake0000,
             asset_infos: validated_asset_infos,
             pair_type: PairType::Xyk {},
             fee_config: FeeConfig {

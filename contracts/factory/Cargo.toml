@@ -17,6 +17,7 @@ library = []
 [dependencies]
 cosmwasm-schema = { workspace = true }
 cosmwasm-std = { workspace = true }
+cw-placeholder = { workspace = true, features = ["library"] }
 cw-storage-plus = { workspace = true }
 cw-utils = { workspace = true }
 cw2 = { workspace = true }
@@ -24,13 +25,13 @@ cw20 = { workspace = true }
 itertools = { workspace = true }
 thiserror = { workspace = true }
 wyndex = { workspace = true }
+wyndex-test-helpers = { workspace = true }
 wyndex-stake = { workspace = true, features = ["library"] }
-cw-placeholder = { workspace = true, features = ["library"] }
 
 [dev-dependencies]
 anyhow = { workspace = true }
 cw-multi-test = { workspace = true }
-cw20-base = { workspace = true }
 cw20 = { workspace = true }
+cw20-base = { workspace = true }
+wyndex-factory-2_1_0 = { package = "wyndex-factory", git = "https://github.com/permissionlessweb/wynddex", branch = "mvp" }
 wyndex-pair = { workspace = true }
-wyndex-factory-2_1_0 = { package = "wyndex-factory", git = "https://github.com/wynddao/wynddex", tag = "v2.1.0" }

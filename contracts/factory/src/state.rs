@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, Api, Decimal, Deps, Order, StdResult};
+use cosmwasm_std::{Addr, Api, Decimal256, Deps, Order, StdResult};
 use cw_storage_plus::{Bound, Item, Map};
 use itertools::Itertools;
 
@@ -19,7 +19,7 @@ pub struct Config {
     /// Contract address to send governance fees to (the protocol)
     pub fee_address: Option<Addr>,
     /// Maximum referral commission
-    pub max_referral_commission: Decimal,
+    pub max_referral_commission: Decimal256,
     /// Default values for lp token staking contracts
     pub default_stake_config: DefaultStakeConfig,
     /// When this is set to `true`, only the owner can create pairs
@@ -166,13 +166,17 @@ mod tests {
             ],
             [
                 native_asset_info("uluna").validate(&api).unwrap(),
-                token_asset_info("astro_token_addr").validate(&api).unwrap(),
-            ],
-            [
-                token_asset_info("random_token_addr")
+                token_asset_info(&api.addr_make("astro_token_addr"))
                     .validate(&api)
                     .unwrap(),
-                token_asset_info("astro_token_addr").validate(&api).unwrap(),
+            ],
+            [
+                token_asset_info(&api.addr_make("random_token_addr"))
+                    .validate(&api)
+                    .unwrap(),
+                token_asset_info(&api.addr_make("astro_token_addr"))
+                    .validate(&api)
+                    .unwrap(),
             ],
         ]
     }

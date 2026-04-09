@@ -5,8 +5,7 @@ use super::error::ContractError;
 use crate::asset::{Asset, AssetInfo, AssetInfoValidated, AssetValidated};
 
 use cosmwasm_std::{
-    from_json, wasm_execute, Addr, Api, CosmosMsg, Decimal, Fraction, QuerierWrapper, StdError,
-    StdResult, Uint128,
+    Addr, Api, CosmosMsg, Decimal256, Fraction, QuerierWrapper, StdError, StdResult, Uint256, from_json, wasm_execute
 };
 use cw20::Cw20ExecuteMsg;
 use itertools::Itertools;
@@ -92,14 +91,14 @@ pub fn check_cw20_in_pool(
 ///
 /// * **spread_amount** spread used in the swap.
 pub fn assert_max_spread(
-    belief_price: Option<Decimal>,
-    max_spread: Option<Decimal>,
-    offer_amount: Uint128,
-    return_amount: Uint128,
-    spread_amount: Uint128,
+    belief_price: Option<Decimal256>,
+    max_spread: Option<Decimal256>,
+    offer_amount: Uint256,
+    return_amount: Uint256,
+    spread_amount: Uint256,
 ) -> Result<(), ContractError> {
-    let default_spread = Decimal::from_str(DEFAULT_SLIPPAGE)?;
-    let max_allowed_spread = Decimal::from_str(MAX_ALLOWED_SLIPPAGE)?;
+    let default_spread = Decimal256::from_str(DEFAULT_SLIPPAGE)?;
+    let max_allowed_spread = Decimal256::from_str(MAX_ALLOWED_SLIPPAGE)?;
 
     let max_spread = max_spread.unwrap_or(default_spread);
     if max_spread.gt(&max_allowed_spread) {
@@ -108,7 +107,7 @@ pub fn assert_max_spread(
 
     if let Some(belief_price) = belief_price {
         let expected_return = offer_amount.mul_floor(belief_price.inv().ok_or_else(|| {
-            ContractError::Std(StdError::generic_err(
+            ContractError::Std(StdError::msg(
                 "Invalid belief_price. Check the input values.",
             ))
         })?);
@@ -116,11 +115,11 @@ pub fn assert_max_spread(
         let spread_amount = expected_return.saturating_sub(return_amount);
 
         if return_amount < expected_return
-            && Decimal::from_ratio(spread_amount, expected_return) > max_spread
+            && Decimal256::from_ratio(spread_amount, expected_return) > max_spread
         {
             return Err(ContractError::MaxSpreadAssertion {});
         }
-    } else if Decimal::from_ratio(spread_amount, return_amount + spread_amount) > max_spread {
+    } else if Decimal256::from_ratio(spread_amount, return_amount + spread_amount) > max_spread {
         return Err(ContractError::MaxSpreadAssertion {});
     }
 
@@ -136,13 +135,13 @@ pub fn assert_max_spread(
 pub fn mint_token_message(
     token: &Addr,
     recipient: &Addr,
-    amount: Uint128,
+    amount: Uint256,
 ) -> Result<Vec<CosmosMsg>, ContractError> {
     Ok(vec![wasm_execute(
         token,
         &Cw20ExecuteMsg::Mint {
             recipient: recipient.to_string(),
-            amount,
+            amount: amount.into(),
         },
         vec![],
     )?
@@ -158,12 +157,12 @@ pub fn mint_token_message(
 /// * **total_share** total amount of LP tokens currently issued by the pool.
 pub fn get_share_in_assets(
     pools: &[AssetValidated],
-    amount: Uint128,
-    total_share: Uint128,
+    amount: Uint256,
+    total_share: Uint256,
 ) -> Vec<AssetValidated> {
-    let mut share_ratio = Decimal::zero();
+    let mut share_ratio = Decimal256::zero();
     if !total_share.is_zero() {
-        share_ratio = Decimal::from_ratio(amount, total_share);
+        share_ratio = Decimal256::from_ratio(amount, total_share);
     }
 
     pools

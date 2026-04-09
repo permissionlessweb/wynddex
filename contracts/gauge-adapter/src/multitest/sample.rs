@@ -1,5 +1,5 @@
 use crate::multitest::suite::Suite;
-use cosmwasm_std::{assert_approx_eq, coin, Addr, Decimal};
+use cosmwasm_std::{assert_approx_eq, coin, Addr, Decimal, Decimal256, Uint128, Uint256};
 use wyndex::{asset::AssetInfo, factory::DefaultStakeConfig};
 
 use super::suite::SuiteBuilder;
@@ -12,8 +12,8 @@ fn native_rewards_work() {
         .with_funds("owner", &[coin(100_000, "juno")])
         .with_stake_config(DefaultStakeConfig {
             staking_code_id: 0,
-            tokens_per_power: 1000u128.into(),
-            min_bond: 1000u128.into(),
+            tokens_per_power: Uint256::from(1000u128),
+            min_bond: Uint256::from(1000u128),
             unbonding_periods: vec![SECONDS_PER_DAY * 7],
             max_distributions: 5,
             converter: None,
@@ -61,7 +61,7 @@ fn native_rewards_work() {
             "owner",
             vec![juno.clone(), wynd_info],
             juno.clone(),
-            vec![(SECONDS_PER_DAY * 7, Decimal::one())],
+            vec![(SECONDS_PER_DAY * 7, Decimal256::one())],
         )
         .unwrap();
     suite
@@ -69,7 +69,7 @@ fn native_rewards_work() {
             "owner",
             vec![juno.clone(), asdf],
             juno,
-            vec![(SECONDS_PER_DAY * 7, Decimal::one())],
+            vec![(SECONDS_PER_DAY * 7, Decimal256::one())],
         )
         .unwrap();
 
@@ -82,7 +82,7 @@ fn native_rewards_work() {
     // execute messages as owner
     suite
         .app
-        .execute_multi(Addr::unchecked("owner"), messages)
+        .execute_multi(suite.app.api().addr_make("owner"), messages)
         .unwrap();
 
     pair1_staking
@@ -94,11 +94,14 @@ fn native_rewards_work() {
 
     // no rewards yet
     assert_eq!(
-        pair1_staking
-            .query_withdrawable_rewards(&suite.app, "whale")
-            .unwrap()[0]
-            .amount
-            .u128(),
+        Uint128::try_from(
+            pair1_staking
+                .query_withdrawable_rewards(&suite.app, "whale")
+                .unwrap()[0]
+                .amount
+        )
+        .unwrap()
+        .u128(),
         0u128,
     );
 
@@ -111,11 +114,14 @@ fn native_rewards_work() {
 
     // 20% of 50_000 should be withdrawable
     assert_approx_eq!(
-        pair1_staking
-            .query_withdrawable_rewards(&suite.app, "whale")
-            .unwrap()[0]
-            .amount,
-        11_500u128.into(),
+        Uint128::try_from(
+            pair1_staking
+                .query_withdrawable_rewards(&suite.app, "whale")
+                .unwrap()[0]
+                .amount
+        )
+        .unwrap(),
+        Uint128::new(11_500),
         "0.01"
     );
 
@@ -131,19 +137,25 @@ fn native_rewards_work() {
 
     // check final rewards
     assert_approx_eq!(
-        pair1_staking
-            .query_withdrawable_rewards(&suite.app, "whale")
-            .unwrap()[0]
-            .amount,
-        50_000u128.into(),
+        Uint128::try_from(
+            pair1_staking
+                .query_withdrawable_rewards(&suite.app, "whale")
+                .unwrap()[0]
+                .amount
+        )
+        .unwrap(),
+        Uint128::new(50_000),
         "0.0001"
     );
     assert_approx_eq!(
-        pair2_staking
-            .query_withdrawable_rewards(&suite.app, "whale")
-            .unwrap()[0]
-            .amount,
-        20_000u128.into(),
+        Uint128::try_from(
+            pair2_staking
+                .query_withdrawable_rewards(&suite.app, "whale")
+                .unwrap()[0]
+                .amount
+        )
+        .unwrap(),
+        Uint128::new(20_000),
         "0.0001"
     );
 }
@@ -154,8 +166,8 @@ fn cw20_rewards_work_direct() {
         .with_funds("owner", &[])
         .with_stake_config(DefaultStakeConfig {
             staking_code_id: 0,
-            tokens_per_power: 1000u128.into(),
-            min_bond: 1000u128.into(),
+            tokens_per_power: Uint256::from(1000u128),
+            min_bond: Uint256::from(1000u128),
             unbonding_periods: vec![SECONDS_PER_DAY * 7],
             max_distributions: 5,
             converter: None,
@@ -173,8 +185,8 @@ fn cw20_rewards_work_via_migration() {
         .with_funds("owner", &[])
         .with_stake_config(DefaultStakeConfig {
             staking_code_id: 0,
-            tokens_per_power: 1000u128.into(),
-            min_bond: 1000u128.into(),
+            tokens_per_power: Uint256::from(1000u128),
+            min_bond: Uint256::from(1000u128),
             unbonding_periods: vec![SECONDS_PER_DAY * 7],
             max_distributions: 5,
             converter: None,
@@ -235,7 +247,7 @@ fn cw20_rewards_work(mut suite: Suite) {
             "owner",
             vec![juno.clone(), wynd_info],
             AssetInfo::Token(reward_contract.to_string()),
-            vec![(SECONDS_PER_DAY * 7, Decimal::one())],
+            vec![(SECONDS_PER_DAY * 7, Decimal256::one())],
         )
         .unwrap();
     suite
@@ -243,7 +255,7 @@ fn cw20_rewards_work(mut suite: Suite) {
             "owner",
             vec![juno, asdf],
             AssetInfo::Token(reward_contract.to_string()),
-            vec![(SECONDS_PER_DAY * 7, Decimal::one())],
+            vec![(SECONDS_PER_DAY * 7, Decimal256::one())],
         )
         .unwrap();
 
@@ -255,13 +267,13 @@ fn cw20_rewards_work(mut suite: Suite) {
         suite
             .query_cw20_balance(pair1_staking.0.as_str(), &reward_contract)
             .unwrap(),
-        0
+        Uint256::zero()
     );
     assert_eq!(
         suite
             .query_cw20_balance(pair2_staking.0.as_str(), &reward_contract)
             .unwrap(),
-        0
+        Uint256::zero()
     );
 
     // sample messages
@@ -273,7 +285,7 @@ fn cw20_rewards_work(mut suite: Suite) {
     // execute messages as owner
     suite
         .app
-        .execute_multi(Addr::unchecked("owner"), messages)
+        .execute_multi(suite.app.api().addr_make("owner"), messages)
         .unwrap();
 
     // tokens transfered but not distributed to users
@@ -281,22 +293,25 @@ fn cw20_rewards_work(mut suite: Suite) {
         suite
             .query_cw20_balance(pair1_staking.0.as_str(), &reward_contract)
             .unwrap(),
-        90
+       Uint256::from(90u128)
     );
     assert_eq!(
         suite
             .query_cw20_balance(pair2_staking.0.as_str(), &reward_contract)
             .unwrap(),
-        10
+        Uint256::from(10u128)
     );
 
     // no rewards yet
     assert_eq!(
-        pair1_staking
-            .query_withdrawable_rewards(&suite.app, "whale")
-            .unwrap()[0]
-            .amount
-            .u128(),
+        Uint128::try_from(
+            pair1_staking
+                .query_withdrawable_rewards(&suite.app, "whale")
+                .unwrap()[0]
+                .amount
+        )
+        .unwrap()
+        .u128(),
         0u128,
     );
 
@@ -306,11 +321,14 @@ fn cw20_rewards_work(mut suite: Suite) {
 
     // no rewards yet
     assert_eq!(
-        pair1_staking
-            .query_withdrawable_rewards(&suite.app, "whale")
-            .unwrap()[0]
-            .amount
-            .u128(),
+        Uint128::try_from(
+            pair1_staking
+                .query_withdrawable_rewards(&suite.app, "whale")
+                .unwrap()[0]
+                .amount
+        )
+        .unwrap()
+        .u128(),
         0u128,
     );
 
@@ -326,11 +344,14 @@ fn cw20_rewards_work(mut suite: Suite) {
 
     // 20% of 90 should be withdrawable (ERROR: get 109 not 18)
     assert_approx_eq!(
-        pair1_staking
-            .query_withdrawable_rewards(&suite.app, "whale")
-            .unwrap()[0]
-            .amount,
-        17u128.into(), // 18-1 rounding error - why???
+        Uint128::try_from(
+            pair1_staking
+                .query_withdrawable_rewards(&suite.app, "whale")
+                .unwrap()[0]
+                .amount
+        )
+        .unwrap(),
+        Uint128::new(17), // 18-1 rounding error - why???
         "0.01"
     );
 
@@ -341,11 +362,14 @@ fn cw20_rewards_work(mut suite: Suite) {
         .unwrap();
     // 100% of 90 should be withdrawable (ERROR: get 109 not 90)
     assert_approx_eq!(
-        pair1_staking
-            .query_withdrawable_rewards(&suite.app, "whale")
-            .unwrap()[0]
-            .amount,
-        89u128.into(), // 90-1 rounding error - why???
+        Uint128::try_from(
+            pair1_staking
+                .query_withdrawable_rewards(&suite.app, "whale")
+                .unwrap()[0]
+                .amount
+        )
+        .unwrap(),
+        Uint128::new(89), // 90-1 rounding error - why???
         "0.01"
     );
 
@@ -353,9 +377,10 @@ fn cw20_rewards_work(mut suite: Suite) {
     pair1_staking
         .withdraw_rewards(&mut suite.app, "whale")
         .unwrap();
+    let whale_addr = suite.app.api().addr_make("whale").to_string();
     assert_eq!(
-        suite.query_cw20_balance("whale", &reward_contract).unwrap(),
-        89 // rounding error from 0.9*100
+        suite.query_cw20_balance(&whale_addr, &reward_contract).unwrap(),
+        Uint256::from_uint128(89u128.into()) // rounding error from 0.9*100
     );
 
     // withdraw other rewards
@@ -366,7 +391,7 @@ fn cw20_rewards_work(mut suite: Suite) {
         .withdraw_rewards(&mut suite.app, "whale")
         .unwrap();
     assert_eq!(
-        suite.query_cw20_balance("whale", &reward_contract).unwrap(),
-        98 // 2 rounding error from 0.9*100 + 0.1*100
+        suite.query_cw20_balance(&whale_addr, &reward_contract).unwrap(),
+        Uint256::from_uint128(98u128.into()) // 2 rounding error from 0.9*100 + 0.1*100
     );
 }

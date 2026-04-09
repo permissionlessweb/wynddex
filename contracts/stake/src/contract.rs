@@ -3,8 +3,8 @@ use std::collections::HashMap;
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    ensure_eq, from_json, to_json_binary, Addr, Binary, Decimal, Deps, DepsMut, Empty, Env,
-    MessageInfo, Order, Response, StdError, StdResult, Storage, Uint128, WasmMsg,
+    ensure_eq, from_json, to_json_binary, Addr, Binary, Decimal256, Deps, DepsMut, Empty, Env,
+    MessageInfo, Order, Response, StdError, StdResult, Storage, Uint128, Uint256, WasmMsg,
 };
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
 use cw_controllers::Claim;
@@ -57,7 +57,7 @@ pub fn instantiate(
     ADMIN.set(deps.branch(), maybe_addr(api, msg.admin.clone())?)?;
 
     // min_bond is at least 1, so 0 stake -> non-membership
-    let min_bond = std::cmp::max(msg.min_bond, Uint128::new(1));
+    let min_bond: Uint256 = std::cmp::max(msg.min_bond, Uint256::new(1));
 
     TOTAL_STAKED.save(deps.storage, &TokenInfo::default())?;
 
@@ -185,7 +185,7 @@ pub fn execute_migrate_stake(
     mut deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    amount: Uint128,
+    amount: Uint256,
     unbonding_period: u64,
 ) -> Result<Response, ContractError> {
     let cfg = CONFIG.load(deps.storage)?;
@@ -218,7 +218,7 @@ pub fn execute_migrate_stake(
             contract_addr: cfg.cw20_contract.into_string(),
             msg: to_json_binary(&Cw20ExecuteMsg::Transfer {
                 recipient: converter.contract.to_string(),
-                amount,
+                amount: amount.into(),
             })?,
             funds: vec![],
         })
@@ -243,7 +243,7 @@ pub fn execute_migrate_stake(
 fn update_reward_config(
     storage: &mut dyn Storage,
     validated_asset: AssetInfoValidated,
-    sent_amount: Uint128,
+    sent_amount: Uint256,
     FundingInfo {
         start_time,
         distribution_duration,
@@ -254,11 +254,14 @@ fn update_reward_config(
     let previous_reward_curve = REWARD_CURVE.load(storage, &validated_asset)?;
 
     let end_time = start_time + distribution_duration;
-    let schedule = Curve::saturating_linear((start_time, amount.u128()), (end_time, 0));
+    let schedule = Curve::saturating_linear(
+        (start_time, Uint128::try_from(amount).unwrap().u128()),
+        (end_time, 0),
+    );
 
     let (min, max) = schedule.range();
     // Validate the the curve locks at most the amount provided and also fully unlocks all rewards sent
-    if min != 0 || max > sent_amount.u128() {
+    if min != 0 || Uint256::from(max) > sent_amount {
         return Err(ContractError::InvalidRewards {});
     }
 
@@ -276,7 +279,7 @@ pub fn execute_create_distribution_flow(
     info: MessageInfo,
     manager: String,
     asset: AssetInfo,
-    rewards: Vec<(UnbondingPeriod, Decimal)>,
+    rewards: Vec<(UnbondingPeriod, Decimal256)>,
 ) -> Result<Response, ContractError> {
     // only admin can create distribution flow
     ADMIN.assert_admin(deps.as_ref(), &info.sender)?;
@@ -331,10 +334,10 @@ pub fn execute_create_distribution_flow(
         &Distribution {
             manager,
             reward_multipliers: rewards,
-            shares_per_point: Uint128::zero(),
+            shares_per_point: Uint256::zero(),
             shares_leftover: 0,
-            distributed_total: Uint128::zero(),
-            withdrawable_total: Uint128::zero(),
+            distributed_total: Uint256::zero(),
+            withdrawable_total: Uint256::zero(),
         },
     )?;
 
@@ -345,7 +348,7 @@ pub fn execute_rebond(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    amount: Uint128,
+    amount: Uint256,
     bond_from: u64,
     bond_to: u64,
 ) -> Result<Response, ContractError> {
@@ -354,7 +357,7 @@ pub fn execute_rebond(
     }
 
     // Raise if no amount was provided
-    if amount == Uint128::zero() {
+    if amount == Uint256::zero() {
         return Err(ContractError::NoRebondAmount {});
     }
     // Short out with an error if trying to rebond to itself
@@ -379,7 +382,7 @@ pub fn execute_rebond(
     let old_rewards = calc_rewards_powers(deps.storage, &cfg, &info.sender, distributions.iter())?;
 
     // Reduce the bond_from
-    let mut old_stake_from = Uint128::zero();
+    let mut old_stake_from = Uint256::zero();
     let new_stake_from = STAKE
         .update(
             deps.storage,
@@ -395,7 +398,7 @@ pub fn execute_rebond(
         .total_stake();
 
     // Increase the bond_to
-    let mut old_stake_to = Uint128::zero();
+    let mut old_stake_to = Uint256::zero();
     let new_stake_to = STAKE
         .update(
             deps.storage,
@@ -455,7 +458,7 @@ pub fn execute_bond(
     deps: DepsMut,
     env: Env,
     sender_cw20_contract: Addr,
-    amount: Uint128,
+    amount: Uint256,
     unbonding_period: u64,
     sender: Addr,
 ) -> Result<Response, ContractError> {
@@ -475,9 +478,9 @@ pub fn execute_mass_bond(
     deps: DepsMut,
     _env: Env,
     sender_cw20_contract: Addr,
-    amount_sent: Uint128,
+    amount_sent: Uint256,
     unbonding_period: u64,
-    delegate_to: Vec<(String, Uint128)>,
+    delegate_to: Vec<(String, Uint256)>,
 ) -> Result<Response, ContractError> {
     let cfg = CONFIG.load(deps.storage)?;
 
@@ -516,7 +519,7 @@ pub fn execute_mass_bond(
         let old_rewards = calc_rewards_powers(deps.storage, &cfg, &sender, distributions.iter())?;
 
         // add to the sender's stake
-        let mut old_stake = Uint128::zero();
+        let mut old_stake = Uint256::zero();
         let new_stake = STAKE
             .update(
                 deps.storage,
@@ -576,8 +579,8 @@ fn update_total_stake(
     storage: &mut dyn Storage,
     cfg: &Config,
     unbonding_period: UnbondingPeriod,
-    old_stake: Uint128,
-    new_stake: Uint128,
+    old_stake: Uint256,
+    new_stake: Uint256,
 ) -> Result<(), ContractError> {
     // get current total stakes
     let mut totals = TOTAL_PER_PERIOD.load(storage)?;
@@ -690,7 +693,7 @@ pub fn execute_unbond(
     mut deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    amount: Uint128,
+    amount: Uint256,
     unbonding_period: u64,
 ) -> Result<Response, ContractError> {
     let cfg = CONFIG.load(deps.storage)?;
@@ -711,7 +714,7 @@ pub fn execute_unbond(
         Ok(TokenInfo {
             staked: token_info.staked.saturating_sub(amount),
             // If unbond all flag set to true the unbonding period is 0.
-            unbonding: token_info.unbonding + Uint128::new(!unbond_all as u128) * amount,
+            unbonding: token_info.unbonding + Uint256::new(!unbond_all as u128) * amount,
         })
     })?;
 
@@ -730,7 +733,7 @@ pub fn execute_unbond(
         CLAIMS.create_claim(
             deps.storage,
             &info.sender,
-            amount,
+            amount.try_into()?,
             // If unbond all flag set to true the claim has no delay.
             Expiration::AtTime(env.block.time.plus_seconds(unbonding_period)),
         )?;
@@ -762,10 +765,10 @@ pub fn execute_quick_unbond(
     // to avoid unnecessary stores for each staker.
     let mut unbonded_by_period = HashMap::with_capacity(cfg.unbonding_periods.len());
     for period in &cfg.unbonding_periods {
-        unbonded_by_period.insert(period, Uint128::zero());
+        unbonded_by_period.insert(period, Uint256::zero());
     }
     // Also keep track of the total amount of claims removed.
-    let mut claimed_total = Uint128::zero();
+    let mut claimed_total = Uint256::zero();
 
     let mut distributions: Vec<_> = DISTRIBUTION
         .range(deps.storage, None, None, Order::Ascending)
@@ -776,7 +779,7 @@ pub fn execute_quick_unbond(
         let old_rewards = calc_rewards_powers(deps.storage, &cfg, &staker, distributions.iter())?;
 
         // the amount the staker unbonds in this call
-        let mut staker_unbonds = Uint128::zero();
+        let mut staker_unbonds = Uint256::zero();
 
         let stakes = STAKE
             .prefix(&staker)
@@ -807,15 +810,15 @@ pub fn execute_quick_unbond(
                 &staker,
                 distribution,
                 old_reward_power,
-                Uint128::zero(),
+                Uint256::zero(),
             )?;
         }
 
-        let open_claims: Uint128 = CLAIMS
+        let open_claims: Uint256 = CLAIMS
             .query_claims(deps.as_ref(), &staker)?
             .claims
             .into_iter()
-            .map(|c| c.amount)
+            .map(|c| Uint256::from(c.amount))
             .sum();
         // in order to delete the claims, we need to create a new Map with the same key,
         // because the `Claims` API does not provide a way to delete unmature claims.
@@ -829,7 +832,7 @@ pub fn execute_quick_unbond(
                 contract_addr: cfg.cw20_contract.to_string(),
                 msg: to_json_binary(&Cw20ExecuteMsg::Transfer {
                     recipient: staker.to_string(),
-                    amount,
+                    amount: amount.into(),
                 })?,
                 funds: vec![],
             };
@@ -841,14 +844,14 @@ pub fn execute_quick_unbond(
     for (asset_info, distribution) in distributions.into_iter() {
         DISTRIBUTION.save(deps.storage, &asset_info, &distribution)?;
     }
-    let unbonded_total = unbonded_by_period.values().sum::<Uint128>();
+    let unbonded_total = unbonded_by_period.values().sum::<Uint256>();
     for (unbonding_period, unbonded) in unbonded_by_period {
         update_total_stake(
             deps.storage,
             &cfg,
             *unbonding_period,
             unbonded,
-            Uint128::zero(),
+            Uint256::zero(),
         )?;
     }
     TOTAL_STAKED.update::<_, StdError>(deps.storage, |token_info| {
@@ -910,7 +913,7 @@ fn calc_rewards_powers<'a>(
     cfg: &Config,
     staker: &Addr,
     distributions: impl Iterator<Item = &'a (AssetInfoValidated, Distribution)>,
-) -> StdResult<Vec<Uint128>> {
+) -> StdResult<Vec<Uint256>> {
     // go through distributions and calculate old reward power for all of them
     let old_rewards = distributions
         .map(|(_, distribution)| {
@@ -927,8 +930,8 @@ fn update_rewards(
     asset_info: &AssetInfoValidated,
     sender: &Addr,
     distribution: &mut Distribution,
-    old_reward_power: Uint128,
-    new_reward_power: Uint128,
+    old_reward_power: Uint256,
+    new_reward_power: Uint256,
 ) -> StdResult<()> {
     // short-circuit if no change
     if old_reward_power == new_reward_power {
@@ -936,8 +939,11 @@ fn update_rewards(
     }
 
     // update their share of the distribution
-    let ppw = distribution.shares_per_point.u128();
-    let diff = new_reward_power.u128() as i128 - old_reward_power.u128() as i128;
+    let ppw = Uint128::try_from(distribution.shares_per_point)
+        .unwrap()
+        .u128();
+    let diff = Uint128::try_from(new_reward_power).unwrap().u128() as i128
+        - Uint128::try_from(old_reward_power).unwrap().u128() as i128;
     apply_points_correction(storage, sender, asset_info, ppw, diff)?;
 
     Ok(())
@@ -951,7 +957,7 @@ fn remove_stake_without_total(
     cfg: &Config,
     staker: &Addr,
     unbonding_period: UnbondingPeriod,
-    amount: Uint128,
+    amount: Uint256,
 ) -> Result<(), ContractError> {
     if cfg
         .unbonding_periods
@@ -968,7 +974,7 @@ fn remove_stake_without_total(
     let old_rewards = calc_rewards_powers(deps.storage, cfg, staker, distributions.iter())?;
 
     // reduce the sender's stake - aborting if insufficient
-    let mut old_stake = Uint128::zero();
+    let mut old_stake = Uint256::zero();
     let new_stake = STAKE
         .update(
             deps.storage,
@@ -1009,7 +1015,11 @@ pub fn execute_claim(
     env: Env,
     info: MessageInfo,
 ) -> Result<Response, ContractError> {
-    let release = CLAIMS.claim_tokens(deps.storage, &info.sender, &env.block, None)?;
+    let release = Uint256::from(
+        CLAIMS
+            .claim_tokens(deps.storage, &info.sender, &env.block, None)?
+            .u128(),
+    );
     if release.is_zero() {
         return Err(ContractError::NothingToClaim {});
     }
@@ -1033,7 +1043,7 @@ pub fn execute_claim(
 }
 
 #[inline]
-fn coin_to_string(amount: Uint128, address: &str) -> String {
+fn coin_to_string(amount: Uint256, address: &str) -> String {
     format!("{} {}", amount, address)
 }
 
@@ -1055,9 +1065,10 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::Admin {} => to_json_binary(&ADMIN.query_admin(deps)?),
         QueryMsg::TotalRewardsPower {} => to_json_binary(&query_total_rewards(deps)?),
         QueryMsg::RewardsPower { address } => to_json_binary(&query_rewards(deps, address)?),
-        QueryMsg::WithdrawableRewards { owner } => {
-            to_json_binary(&query_withdrawable_rewards(deps, owner)?)
-        }
+        QueryMsg::WithdrawableRewards { owner } => to_json_binary(&query_withdrawable_rewards(
+            deps,
+            deps.api.addr_validate(&owner)?,
+        )?),
         QueryMsg::DistributedRewards {} => to_json_binary(&query_distributed_rewards(deps)?),
         QueryMsg::UndistributedRewards {} => {
             to_json_binary(&query_undistributed_rewards(deps, env)?)
@@ -1075,10 +1086,10 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
 struct DistStats {
     asset: AssetInfoValidated,
     /// The total rewards power in the distribution
-    total_rewards: Uint128,
-    reward_multipliers: Vec<(UnbondingPeriod, Decimal)>,
+    total_rewards: Uint256,
+    reward_multipliers: Vec<(UnbondingPeriod, Decimal256)>,
     /// The amount of tokens that will (probably) be distributed by this distribution within the next year
-    annualized_payout: Decimal,
+    annualized_payout: Decimal256,
 }
 
 fn query_annualized_rewards(deps: Deps, env: Env) -> StdResult<AnnualizedRewardsResponse> {
@@ -1121,15 +1132,15 @@ fn query_annualized_rewards(deps: Deps, env: Env) -> StdResult<AnnualizedRewards
 
             // we want basically, typical reward payout times the multiplier of this unbonding period
             // multiplier * annualized payout / total points
-            let multiplier: Decimal = stats
+            let multiplier: Decimal256 = stats
                 .reward_multipliers
                 .iter()
                 .find(|(ub, _)| ub == &unbonding_period)
                 .unwrap()
                 .1;
             // normalize by tokens_per_power
-            let annual_rewards = (multiplier * stats.annualized_payout)
-                / (stats.total_rewards * config.tokens_per_power);
+            let divisor = stats.total_rewards * config.tokens_per_power;
+            let annual_rewards = (multiplier * stats.annualized_payout) / divisor;
 
             rewards.push(AnnualizedReward {
                 info: stats.asset.clone(),
@@ -1141,14 +1152,14 @@ fn query_annualized_rewards(deps: Deps, env: Env) -> StdResult<AnnualizedRewards
     Ok(AnnualizedRewardsResponse { rewards: aprs })
 }
 
-fn calculate_annualized_payout(reward_curve: Option<Curve>, now: u64) -> Decimal {
+fn calculate_annualized_payout(reward_curve: Option<Curve>, now: u64) -> Decimal256 {
     match reward_curve {
         Some(c) => {
             // look at the last timestamp in the rewards curve and extrapolate
             match c.end() {
                 Some(last_timestamp) => {
                     if last_timestamp <= now {
-                        return Decimal::zero();
+                        return Decimal256::zero();
                     }
                     let time_diff = last_timestamp - now;
                     if time_diff >= SECONDS_PER_YEAR {
@@ -1156,7 +1167,7 @@ fn calculate_annualized_payout(reward_curve: Option<Curve>, now: u64) -> Decimal
                         // we can just calculate the rewards for the whole year directly
 
                         // formula: `(locked_now - locked_end)`
-                        Decimal::from_atomics(c.value(now) - c.value(now + SECONDS_PER_YEAR), 0)
+                        Decimal256::from_atomics(c.value(now) - c.value(now + SECONDS_PER_YEAR), 0)
                             .expect("too many rewards")
                     } else {
                         // if the last timestamp is less than a year in the future,
@@ -1168,7 +1179,7 @@ fn calculate_annualized_payout(reward_curve: Option<Curve>, now: u64) -> Decimal
                         // which is then extrapolated to a whole year.
                         // Because of the constraints put on `c` when setting it,
                         // we know that `locked_end` is always 0, so we don't need to subtract it.
-                        Decimal::from_ratio(
+                        Decimal256::from_ratio(
                             c.value(now) * Uint128::from(SECONDS_PER_YEAR),
                             time_diff,
                         )
@@ -1177,11 +1188,11 @@ fn calculate_annualized_payout(reward_curve: Option<Curve>, now: u64) -> Decimal
                 None => {
                     // this case should only happen if the reward curve is freshly initialized
                     // (i.e. no rewards have been scheduled yet)
-                    Decimal::zero()
+                    Decimal256::zero()
                 }
             }
         }
-        None => Decimal::zero(),
+        None => Decimal256::zero(),
     }
 }
 
@@ -1246,9 +1257,7 @@ pub fn query_staked(
     let totals = TOTAL_PER_PERIOD.load(deps.storage)?;
     totals
         .binary_search_by_key(&unbonding_period, |&(entry, _)| entry)
-        .map_err(|_| {
-            StdError::generic_err(format!("No unbonding period found: {}", unbonding_period))
-        })?;
+        .map_err(|_| StdError::msg(format!("No unbonding period found: {}", unbonding_period)))?;
 
     let stake = STAKE
         .may_load(deps.storage, (&addr, unbonding_period))?
@@ -1316,7 +1325,7 @@ pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> Result<Response, Co
     config.unbonder = addr_opt_validate(deps.api, &msg.unbonder)?;
     config.converter = msg
         .converter
-        .map(|c| {
+        .map(|c| -> StdResult<_> {
             StdResult::Ok(ConverterConfig {
                 contract: deps.api.addr_validate(&c.contract)?,
                 pair_to: deps.api.addr_validate(&c.pair_to)?,
@@ -1333,8 +1342,8 @@ pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> Result<Response, Co
 
 #[cfg(test)]
 mod tests {
-    use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
-    use cosmwasm_std::{from_slice, Coin, CosmosMsg, Decimal, WasmMsg};
+    use cosmwasm_std::testing::{message_info, mock_dependencies, mock_env, MockApi};
+    use cosmwasm_std::{from_json, Addr, Coin, CosmosMsg, Decimal256, Uint128, WasmMsg};
     use cw_controllers::Claim;
     use cw_utils::Duration;
     use wyndex::asset::{native_asset_info, token_asset_info};
@@ -1349,8 +1358,12 @@ mod tests {
     const USER1: &str = "user1";
     const USER2: &str = "user2";
     const USER3: &str = "user3";
-    const TOKENS_PER_POWER: Uint128 = Uint128::new(1_000);
-    const MIN_BOND: Uint128 = Uint128::new(5_000);
+
+    fn mock_info(sender: &Addr, funds: &[Coin]) -> cosmwasm_std::MessageInfo {
+        message_info(sender, funds)
+    }
+    const TOKENS_PER_POWER: Uint256 = Uint256::new(1_000);
+    const MIN_BOND: Uint256 = Uint256::new(5_000);
     const UNBONDING_BLOCKS: u64 = 100;
     const UNBONDING_PERIOD: u64 = UNBONDING_BLOCKS / 5;
     const UNBONDING_PERIOD_2: u64 = 2 * UNBONDING_PERIOD;
@@ -1375,21 +1388,21 @@ mod tests {
     fn cw20_instantiate(
         deps: DepsMut,
         env: Env,
-        tokens_per_power: Uint128,
-        min_bond: Uint128,
+        tokens_per_power: Uint256,
+        min_bond: Uint256,
         stake_config: Vec<UnbondingPeriod>,
     ) {
         let msg = InstantiateMsg {
-            cw20_contract: CW20_ADDRESS.to_owned(),
+            cw20_contract: MockApi::default().addr_make(CW20_ADDRESS).into(),
             tokens_per_power,
             min_bond,
             unbonding_periods: stake_config,
-            admin: Some(INIT_ADMIN.into()),
+            admin: Some(MockApi::default().addr_make(INIT_ADMIN).into()),
             max_distributions: 6,
             unbonder: None,
             converter: None,
         };
-        let info = mock_info("creator", &[]);
+        let info = mock_info(&MockApi::default().addr_make("creator"), &[]);
         instantiate(deps, env, info, msg).unwrap();
     }
 
@@ -1404,18 +1417,22 @@ mod tests {
         let mut env = mock_env();
         env.block.time = env.block.time.plus_seconds(time_delta);
 
-        for (addr, stake) in &[(USER1, user1), (USER2, user2), (USER3, user3)] {
+        for (addr, stake) in &[
+            (MockApi::default().addr_make(USER1), user1),
+            (MockApi::default().addr_make(USER2), user2),
+            (MockApi::default().addr_make(USER3), user3),
+        ] {
             if *stake != 0 {
                 let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
                     sender: addr.to_string(),
-                    amount: Uint128::new(*stake),
+                    amount: Uint256::new(*stake),
                     msg: to_json_binary(&ReceiveMsg::Delegate {
                         unbonding_period,
                         delegate_as: None,
                     })
                     .unwrap(),
                 });
-                let info = mock_info(CW20_ADDRESS, &[]);
+                let info = mock_info(&MockApi::default().addr_make(CW20_ADDRESS), &[]);
                 execute(deps.branch(), env.clone(), info, msg).unwrap();
             }
         }
@@ -1437,12 +1454,16 @@ mod tests {
         let mut env = mock_env();
         env.block.time = env.block.time.plus_seconds(time_delta);
 
-        for (addr, stake) in &[(USER1, user1), (USER2, user2), (USER3, user3)] {
+        for (addr, stake) in &[
+            (MockApi::default().addr_make(USER1), user1),
+            (MockApi::default().addr_make(USER2), user2),
+            (MockApi::default().addr_make(USER3), user3),
+        ] {
             if *stake != 0 {
                 let msg = ExecuteMsg::Rebond {
                     bond_from,
                     bond_to,
-                    tokens: Uint128::new(*stake),
+                    tokens: Uint256::new(*stake),
                 };
                 let info = mock_info(addr, &[]);
                 execute(deps.branch(), env.clone(), info, msg).unwrap();
@@ -1461,10 +1482,14 @@ mod tests {
         let mut env = mock_env();
         env.block.time = env.block.time.plus_seconds(time_delta);
 
-        for (addr, stake) in &[(USER1, user1), (USER2, user2), (USER3, user3)] {
+        for (addr, stake) in &[
+            (MockApi::default().addr_make(USER1), user1),
+            (MockApi::default().addr_make(USER2), user2),
+            (MockApi::default().addr_make(USER3), user3),
+        ] {
             if *stake != 0 {
                 let msg = ExecuteMsg::Unbond {
-                    tokens: Uint128::new(*stake),
+                    tokens: Uint256::new(*stake),
                     unbonding_period,
                 };
                 let info = mock_info(addr, &[]);
@@ -1489,32 +1514,35 @@ mod tests {
 
         // it worked, let's query the state
         let res = ADMIN.query_admin(deps.as_ref()).unwrap();
-        assert_eq!(Some(INIT_ADMIN.into()), res.admin);
+        assert_eq!(
+            Some(MockApi::default().addr_make(INIT_ADMIN).to_string()),
+            res.admin
+        );
 
         // setup distribution flow
         execute_create_distribution_flow(
             deps.as_mut(),
-            mock_info(INIT_ADMIN, &[]),
-            INIT_ADMIN.to_string(),
+            message_info(&MockApi::default().addr_make(INIT_ADMIN), &[]),
+            MockApi::default().addr_make(INIT_ADMIN).to_string(),
             native_asset_info(DENOM),
-            vec![(UNBONDING_PERIOD, Decimal::percent(1))],
+            vec![(UNBONDING_PERIOD, Decimal256::percent(1))],
         )
         .unwrap();
 
         // make sure distribution logic is set up properly
         let raw = query(deps.as_ref(), mock_env(), QueryMsg::DistributionData {}).unwrap();
-        let res: DistributionDataResponse = from_slice(&raw).unwrap();
+        let res: DistributionDataResponse = from_json(&raw).unwrap();
         assert_eq!(
             res.distributions,
             vec![(
                 AssetInfoValidated::Native(DENOM.to_string()),
                 Distribution {
-                    shares_per_point: Uint128::zero(),
+                    shares_per_point: Uint256::zero(),
                     shares_leftover: 0,
-                    distributed_total: Uint128::zero(),
-                    withdrawable_total: Uint128::zero(),
-                    manager: Addr::unchecked(INIT_ADMIN),
-                    reward_multipliers: vec![(UNBONDING_PERIOD, Decimal::percent(1))],
+                    distributed_total: Uint256::zero(),
+                    withdrawable_total: Uint256::zero(),
+                    manager: MockApi::default().addr_make(INIT_ADMIN),
+                    reward_multipliers: vec![(UNBONDING_PERIOD, Decimal256::percent(1))],
                 }
             )]
         );
@@ -1523,17 +1551,17 @@ mod tests {
             deps.as_ref(),
             mock_env(),
             QueryMsg::WithdrawAdjustmentData {
-                addr: USER1.to_owned(),
+                addr: MockApi::default().addr_make(USER1).to_string(),
                 asset: native_asset_info(DENOM),
             },
         )
         .unwrap();
-        let res: WithdrawAdjustmentDataResponse = from_slice(&raw).unwrap();
+        let res: WithdrawAdjustmentDataResponse = from_json(&raw).unwrap();
         assert_eq!(
             res,
             WithdrawAdjustment {
                 shares_correction: 0,
-                withdrawn_rewards: Uint128::zero(),
+                withdrawn_rewards: Uint256::zero(),
             }
         );
     }
@@ -1546,14 +1574,32 @@ mod tests {
         user3_stake: u128,
         unbonding_period: u64,
     ) {
-        let stake1 = query_staked(deps, env, USER1.into(), unbonding_period).unwrap();
-        assert_eq!(stake1.stake.u128(), user1_stake);
+        let stake1 = query_staked(
+            deps,
+            env,
+            MockApi::default().addr_make(USER1).into(),
+            unbonding_period,
+        )
+        .unwrap();
+        assert_eq!(Uint128::try_from(stake1.stake).unwrap().u128(), user1_stake);
 
-        let stake2 = query_staked(deps, env, USER2.into(), unbonding_period).unwrap();
-        assert_eq!(stake2.stake.u128(), user2_stake);
+        let stake2 = query_staked(
+            deps,
+            env,
+            MockApi::default().addr_make(USER2).to_string(),
+            unbonding_period,
+        )
+        .unwrap();
+        assert_eq!(Uint128::try_from(stake2.stake).unwrap().u128(), user2_stake);
 
-        let stake3 = query_staked(deps, env, USER3.into(), unbonding_period).unwrap();
-        assert_eq!(stake3.stake.u128(), user3_stake);
+        let stake3 = query_staked(
+            deps,
+            env,
+            MockApi::default().addr_make(USER3).to_string(),
+            unbonding_period,
+        )
+        .unwrap();
+        assert_eq!(Uint128::try_from(stake3.stake).unwrap().u128(), user3_stake);
     }
 
     // this tests the member queries
@@ -1574,21 +1620,24 @@ mod tests {
         );
     }
 
-    fn assert_cw20_undelegate(res: cosmwasm_std::Response, recipient: &str, amount: u128) {
+    fn assert_cw20_undelegate(res: cosmwasm_std::Response, recipient: &Addr, amount: u128) {
         match &res.messages[0].msg {
             CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr,
                 msg,
                 funds,
             }) => {
-                assert_eq!(contract_addr.as_str(), CW20_ADDRESS);
+                assert_eq!(
+                    contract_addr.as_str(),
+                    MockApi::default().addr_make(CW20_ADDRESS).to_string()
+                );
                 assert_eq!(funds.len(), 0);
-                let parsed: Cw20ExecuteMsg = from_slice(msg).unwrap();
+                let parsed: Cw20ExecuteMsg = from_json(msg).unwrap();
                 assert_eq!(
                     parsed,
                     Cw20ExecuteMsg::Transfer {
                         recipient: recipient.into(),
-                        amount: Uint128::new(amount)
+                        amount: Uint256::new(amount)
                     }
                 );
             }
@@ -1597,14 +1646,14 @@ mod tests {
     }
 
     fn assert_native_rewards(
-        response: Vec<(AssetInfoValidated, Uint128)>,
+        response: Vec<(AssetInfoValidated, Uint256)>,
         expected: &[(&str, u128)],
         msg: &str,
     ) {
         assert_eq!(
             expected
                 .iter()
-                .map(|(denom, power)| (native(denom), Uint128::new(*power)))
+                .map(|(denom, power)| (native(denom), Uint256::new(*power)))
                 .collect::<Vec<_>>(),
             response,
             "{}",
@@ -1659,7 +1708,7 @@ mod tests {
         env.block.time = env.block.time.plus_seconds(unbonding_period);
         let expires = unbonding.after(&env.block);
         assert_eq!(
-            get_claims(deps.as_ref(), &Addr::unchecked(USER1)),
+            get_claims(deps.as_ref(), &MockApi::default().addr_make(USER1)),
             vec![Claim::new(7_900, expires)]
         );
 
@@ -1668,14 +1717,14 @@ mod tests {
         let res = execute(
             deps.as_mut(),
             env.clone(),
-            mock_info(USER1, &[]),
+            message_info(&MockApi::default().addr_make(USER1), &[]),
             ExecuteMsg::Claim {},
         )
         .unwrap();
         assert_eq!(res.messages.len(), 1);
 
         assert_stake(deps.as_ref(), &env, 12_100, 8_900, 500);
-        assert_cw20_undelegate(res, USER1, 7_900)
+        assert_cw20_undelegate(res, &MockApi::default().addr_make(USER1), 7_900)
     }
 
     fn get_claims(deps: Deps, addr: &Addr) -> Vec<Claim> {
@@ -1696,14 +1745,17 @@ mod tests {
         // check the claims for each user
         let expires = Duration::Time(UNBONDING_PERIOD).after(&env.block);
         assert_eq!(
-            get_claims(deps.as_ref(), &Addr::unchecked(USER1)),
+            get_claims(deps.as_ref(), &MockApi::default().addr_make(USER1)),
             vec![Claim::new(4_500, expires)]
         );
         assert_eq!(
-            get_claims(deps.as_ref(), &Addr::unchecked(USER2)),
+            get_claims(deps.as_ref(), &MockApi::default().addr_make(USER2)),
             vec![Claim::new(2_600, expires)]
         );
-        assert_eq!(get_claims(deps.as_ref(), &Addr::unchecked(USER3)), vec![]);
+        assert_eq!(
+            get_claims(deps.as_ref(), &MockApi::default().addr_make(USER3)),
+            vec![]
+        );
 
         // do another unbond later on
         let mut env2 = mock_env();
@@ -1713,15 +1765,15 @@ mod tests {
         // with updated claims
         let expires2 = Duration::Time(UNBONDING_PERIOD).after(&env2.block);
         assert_eq!(
-            get_claims(deps.as_ref(), &Addr::unchecked(USER1)),
+            get_claims(deps.as_ref(), &MockApi::default().addr_make(USER1)),
             vec![Claim::new(4_500, expires)]
         );
         assert_eq!(
-            get_claims(deps.as_ref(), &Addr::unchecked(USER2)),
+            get_claims(deps.as_ref(), &MockApi::default().addr_make(USER2)),
             vec![Claim::new(2_600, expires), Claim::new(1_345, expires2)]
         );
         assert_eq!(
-            get_claims(deps.as_ref(), &Addr::unchecked(USER3)),
+            get_claims(deps.as_ref(), &MockApi::default().addr_make(USER3)),
             vec![Claim::new(1_500, expires2)]
         );
 
@@ -1729,7 +1781,7 @@ mod tests {
         let err = execute(
             deps.as_mut(),
             env2,
-            mock_info(USER1, &[]),
+            mock_info(&MockApi::default().addr_make(USER1), &[]),
             ExecuteMsg::Claim {},
         )
         .unwrap_err();
@@ -1742,40 +1794,43 @@ mod tests {
         let res = execute(
             deps.as_mut(),
             env3.clone(),
-            mock_info(USER1, &[]),
+            mock_info(&MockApi::default().addr_make(USER1), &[]),
             ExecuteMsg::Claim {},
         )
         .unwrap();
-        assert_cw20_undelegate(res, USER1, 4_500);
+        assert_cw20_undelegate(res, &MockApi::default().addr_make(USER1), 4_500);
 
         // second releases partially
         let res = execute(
             deps.as_mut(),
             env3.clone(),
-            mock_info(USER2, &[]),
+            mock_info(&MockApi::default().addr_make(USER2), &[]),
             ExecuteMsg::Claim {},
         )
         .unwrap();
-        assert_cw20_undelegate(res, USER2, 2_600);
+        assert_cw20_undelegate(res, &MockApi::default().addr_make(USER2), 2_600);
 
         // but the third one cannot release
         let err = execute(
             deps.as_mut(),
             env3,
-            mock_info(USER3, &[]),
+            mock_info(&MockApi::default().addr_make(USER3), &[]),
             ExecuteMsg::Claim {},
         )
         .unwrap_err();
         assert_eq!(err, ContractError::NothingToClaim {});
 
         // claims updated properly
-        assert_eq!(get_claims(deps.as_ref(), &Addr::unchecked(USER1)), vec![]);
         assert_eq!(
-            get_claims(deps.as_ref(), &Addr::unchecked(USER2)),
+            get_claims(deps.as_ref(), &MockApi::default().addr_make(USER1)),
+            vec![]
+        );
+        assert_eq!(
+            get_claims(deps.as_ref(), &MockApi::default().addr_make(USER2)),
             vec![Claim::new(1_345, expires2)]
         );
         assert_eq!(
-            get_claims(deps.as_ref(), &Addr::unchecked(USER3)),
+            get_claims(deps.as_ref(), &MockApi::default().addr_make(USER3)),
             vec![Claim::new(1_500, expires2)]
         );
 
@@ -1789,15 +1844,18 @@ mod tests {
         let res = execute(
             deps.as_mut(),
             env4,
-            mock_info(USER2, &[]),
+            mock_info(&MockApi::default().addr_make(USER2), &[]),
             ExecuteMsg::Claim {},
         )
         .unwrap();
-        assert_cw20_undelegate(res, USER2, 2_950); // 1_345 + 600 + 1_005
-        assert_eq!(get_claims(deps.as_ref(), &Addr::unchecked(USER2)), vec![]);
+        assert_cw20_undelegate(res, &MockApi::default().addr_make(USER2), 2_950); // 1_345 + 600 + 1_005
+        assert_eq!(
+            get_claims(deps.as_ref(), &MockApi::default().addr_make(USER2)),
+            vec![]
+        );
     }
 
-    fn rewards(deps: Deps, user: &str) -> Vec<(AssetInfoValidated, Uint128)> {
+    fn rewards(deps: Deps, user: &Addr) -> Vec<(AssetInfoValidated, Uint256)> {
         query_rewards(deps, user.to_string()).unwrap().rewards
     }
 
@@ -1816,34 +1874,43 @@ mod tests {
         // create distribution flow to be able to receive rewards
         execute_create_distribution_flow(
             deps.as_mut(),
-            mock_info(INIT_ADMIN, &[]),
-            INIT_ADMIN.to_string(),
+            message_info(&MockApi::default().addr_make(INIT_ADMIN), &[]),
+            MockApi::default().addr_make(INIT_ADMIN).to_string(),
             native_asset_info(DENOM),
-            vec![(UNBONDING_PERIOD, Decimal::percent(1))],
+            vec![(UNBONDING_PERIOD, Decimal256::percent(1))],
         )
         .unwrap();
 
         // assert original rewards
-        assert_eq!(rewards(deps.as_ref(), USER1), vec![]);
-        assert_eq!(rewards(deps.as_ref(), USER2), vec![]);
-        assert_eq!(rewards(deps.as_ref(), USER3), vec![]);
+        assert_eq!(
+            rewards(deps.as_ref(), &MockApi::default().addr_make(USER1)),
+            vec![]
+        );
+        assert_eq!(
+            rewards(deps.as_ref(), &MockApi::default().addr_make(USER2)),
+            vec![]
+        );
+        assert_eq!(
+            rewards(deps.as_ref(), &MockApi::default().addr_make(USER3)),
+            vec![]
+        );
 
         // ensure it rounds down, and respects cut-off
         bond_cw20(deps.as_mut(), 1_200_000, 770_000, 4_000_000, 1);
 
         // assert updated rewards
         assert_native_rewards(
-            rewards(deps.as_ref(), USER1),
+            rewards(deps.as_ref(), &MockApi::default().addr_make(USER1)),
             &[(DENOM, 12)],
             "1_200_000 * 1% / 1_000 = 12",
         );
         assert_native_rewards(
-            rewards(deps.as_ref(), USER2),
+            rewards(deps.as_ref(), &MockApi::default().addr_make(USER2)),
             &[(DENOM, 7)],
             "770_000 * 1% / 1_000 = 7",
         );
         assert_native_rewards(
-            rewards(deps.as_ref(), USER3),
+            rewards(deps.as_ref(), &MockApi::default().addr_make(USER3)),
             &[(DENOM, 40)],
             "4_000_000 * 1% / 1_000 = 40",
         );
@@ -1852,18 +1919,18 @@ mod tests {
         unbond(deps.as_mut(), 100_000, 99_600, 3_600_000, UNBONDING_PERIOD);
 
         assert_native_rewards(
-            rewards(deps.as_ref(), USER1),
+            rewards(deps.as_ref(), &MockApi::default().addr_make(USER1)),
             &[(DENOM, 11)],
             "1_100_000 * 1% / 1_000 = 11",
         );
         assert_native_rewards(
-            rewards(deps.as_ref(), USER2),
+            rewards(deps.as_ref(), &MockApi::default().addr_make(USER2)),
             &[(DENOM, 6)],
             "600_955 * 1% / 1_000 = 6",
         );
         // USER3 has 400_000 left, this is above min_bound. But the rewards (4_000) would have been less
         assert_native_rewards(
-            rewards(deps.as_ref(), USER3),
+            rewards(deps.as_ref(), &MockApi::default().addr_make(USER3)),
             &[(DENOM, 4)],
             "min_bound applied to stake (400_000), before reward multiplier (4_000)",
         );
@@ -1877,44 +1944,53 @@ mod tests {
             deps.as_mut(),
             env.clone(),
             TOKENS_PER_POWER,
-            Uint128::new(1000),
+            Uint256::new(1000),
             vec![UNBONDING_PERIOD, UNBONDING_PERIOD_2],
         );
 
         // create distribution flow to be able to receive rewards
         execute_create_distribution_flow(
             deps.as_mut(),
-            mock_info(INIT_ADMIN, &[]),
-            INIT_ADMIN.to_string(),
+            message_info(&MockApi::default().addr_make(INIT_ADMIN), &[]),
+            MockApi::default().addr_make(INIT_ADMIN).to_string(),
             native_asset_info(DENOM),
             vec![
-                (UNBONDING_PERIOD, Decimal::percent(1)),
-                (UNBONDING_PERIOD_2, Decimal::percent(10)),
+                (UNBONDING_PERIOD, Decimal256::percent(1)),
+                (UNBONDING_PERIOD_2, Decimal256::percent(10)),
             ],
         )
         .unwrap();
 
         // assert original rewards
-        assert_eq!(rewards(deps.as_ref(), USER1), vec![]);
-        assert_eq!(rewards(deps.as_ref(), USER2), vec![]);
-        assert_eq!(rewards(deps.as_ref(), USER3), vec![]);
+        assert_eq!(
+            rewards(deps.as_ref(), &MockApi::default().addr_make(USER1)),
+            vec![]
+        );
+        assert_eq!(
+            rewards(deps.as_ref(), &MockApi::default().addr_make(USER2)),
+            vec![]
+        );
+        assert_eq!(
+            rewards(deps.as_ref(), &MockApi::default().addr_make(USER3)),
+            vec![]
+        );
 
         // bond some tokens for first period
         bond_cw20(deps.as_mut(), 1_000_000, 180_000, 10_000, 1);
 
         // assert updated rewards
         assert_native_rewards(
-            rewards(deps.as_ref(), USER1),
+            rewards(deps.as_ref(), &MockApi::default().addr_make(USER1)),
             &[(DENOM, 10)],
             "1_000_000 * 1% / 1_000 = 10",
         );
         assert_native_rewards(
-            rewards(deps.as_ref(), USER2),
+            rewards(deps.as_ref(), &MockApi::default().addr_make(USER2)),
             &[(DENOM, 1)],
             "180_000 * 1% / 1_000 = 1",
         );
         assert_native_rewards(
-            rewards(deps.as_ref(), USER3),
+            rewards(deps.as_ref(), &MockApi::default().addr_make(USER3)),
             &[],
             "10_000 * 1% = 100 < min_bond",
         );
@@ -1931,17 +2007,17 @@ mod tests {
 
         // assert updated rewards
         assert_native_rewards(
-            rewards(deps.as_ref(), USER1),
+            rewards(deps.as_ref(), &MockApi::default().addr_make(USER1)),
             &[(DENOM, 110)],
             "10 + 1_000_000 * 10% / 1_000 = 110",
         );
         assert_native_rewards(
-            rewards(deps.as_ref(), USER2),
+            rewards(deps.as_ref(), &MockApi::default().addr_make(USER2)),
             &[(DENOM, 11)],
             "1 + 100_000 * 10% / 1_000 = 11",
         );
         assert_native_rewards(
-            rewards(deps.as_ref(), USER3),
+            rewards(deps.as_ref(), &MockApi::default().addr_make(USER3)),
             &[],
             "0 + 9_000 * 10% = 900 < min_bond",
         );
@@ -1969,17 +2045,17 @@ mod tests {
         );
         // assert updated rewards
         assert_native_rewards(
-            rewards(deps.as_ref(), USER1),
+            rewards(deps.as_ref(), &MockApi::default().addr_make(USER1)),
             &[(DENOM, 119)],
             "900_000 * 1% / 1_000 + 1_100_000 * 10% / 1_000 = 9 + 110 = 119",
         );
         assert_native_rewards(
-            rewards(deps.as_ref(), USER2),
+            rewards(deps.as_ref(), &MockApi::default().addr_make(USER2)),
             &[(DENOM, 28)],
             "0 + 280_000 * 10% / 1_000 = 28",
         );
         assert_native_rewards(
-            rewards(deps.as_ref(), USER3),
+            rewards(deps.as_ref(), &MockApi::default().addr_make(USER3)),
             &[(DENOM, 1)],
             "0 + 19_000 * 10% / 1_000 = 1",
         );
@@ -1993,8 +2069,8 @@ mod tests {
         cw20_instantiate(
             deps.as_mut(),
             env,
-            Uint128::new(100),
-            Uint128::zero(),
+            Uint256::new(100),
+            Uint256::zero(),
             vec![UNBONDING_PERIOD],
         );
 
@@ -2016,7 +2092,7 @@ mod tests {
             BondingInfoResponse {
                 bonding: vec!(BondingPeriodInfo {
                     unbonding_period: 20,
-                    total_staked: Uint128::zero(),
+                    total_staked: Uint256::zero(),
                 })
             }
         );
@@ -2032,20 +2108,20 @@ mod tests {
         for denom in &DENOMS {
             execute_create_distribution_flow(
                 deps.as_mut(),
-                mock_info(INIT_ADMIN, &[]),
-                INIT_ADMIN.to_string(),
+                message_info(&MockApi::default().addr_make(INIT_ADMIN), &[]),
+                MockApi::default().addr_make(INIT_ADMIN).to_string(),
                 native_asset_info(denom),
-                vec![(UNBONDING_PERIOD, Decimal::one())],
+                vec![(UNBONDING_PERIOD, Decimal256::one())],
             )
             .unwrap();
         }
         // next one should fail
         let err = execute_create_distribution_flow(
             deps.as_mut(),
-            mock_info(INIT_ADMIN, &[]),
-            INIT_ADMIN.to_string(),
+            message_info(&MockApi::default().addr_make(INIT_ADMIN), &[]),
+            MockApi::default().addr_make(INIT_ADMIN).to_string(),
             native_asset_info(DENOM),
-            vec![(UNBONDING_PERIOD, Decimal::one())],
+            vec![(UNBONDING_PERIOD, Decimal256::one())],
         )
         .unwrap_err();
         assert_eq!(err, ContractError::TooManyDistributions(6));
@@ -2059,20 +2135,20 @@ mod tests {
         // create distribution flow
         execute_create_distribution_flow(
             deps.as_mut(),
-            mock_info(INIT_ADMIN, &[]),
-            INIT_ADMIN.to_string(),
+            message_info(&MockApi::default().addr_make(INIT_ADMIN), &[]),
+            MockApi::default().addr_make(INIT_ADMIN).to_string(),
             native_asset_info(DENOM),
-            vec![(UNBONDING_PERIOD, Decimal::one())],
+            vec![(UNBONDING_PERIOD, Decimal256::one())],
         )
         .unwrap();
 
         // next one should fail
         let err = execute_create_distribution_flow(
             deps.as_mut(),
-            mock_info(INIT_ADMIN, &[]),
-            INIT_ADMIN.to_string(),
+            message_info(&MockApi::default().addr_make(INIT_ADMIN), &[]),
+            MockApi::default().addr_make(INIT_ADMIN).to_string(),
             native_asset_info(DENOM),
-            vec![(UNBONDING_PERIOD, Decimal::one())],
+            vec![(UNBONDING_PERIOD, Decimal256::one())],
         )
         .unwrap_err();
 
@@ -2092,22 +2168,25 @@ mod tests {
         // create distribution flow
         execute_create_distribution_flow(
             deps.as_mut(),
-            mock_info(INIT_ADMIN, &[]),
-            INIT_ADMIN.to_string(),
+            message_info(&MockApi::default().addr_make(INIT_ADMIN), &[]),
+            MockApi::default().addr_make(INIT_ADMIN).to_string(),
             native_asset_info(DENOM),
-            vec![(UNBONDING_PERIOD, Decimal::one())],
+            vec![(UNBONDING_PERIOD, Decimal256::one())],
         )
         .unwrap();
 
         // call distribute, but send unsupported funds
         let unsupported_funds = Coin {
             denom: "unsupported".to_string(),
-            amount: Uint128::new(100),
+            amount: Uint256::new(100),
         };
         let err = execute_distribute_rewards(
             deps.as_mut(),
             mock_env(),
-            mock_info(INIT_ADMIN, &[unsupported_funds.clone()]),
+            message_info(
+                &MockApi::default().addr_make(INIT_ADMIN),
+                &[unsupported_funds.clone()],
+            ),
             None,
         )
         .unwrap_err();
@@ -2123,10 +2202,10 @@ mod tests {
         // try to create distribution flow for staking token
         let err = execute_create_distribution_flow(
             deps.as_mut(),
-            mock_info(INIT_ADMIN, &[]),
-            INIT_ADMIN.to_string(),
-            token_asset_info(CW20_ADDRESS),
-            vec![(UNBONDING_PERIOD, Decimal::one())],
+            message_info(&MockApi::default().addr_make(INIT_ADMIN), &[]),
+            MockApi::default().addr_make(INIT_ADMIN).to_string(),
+            token_asset_info(&MockApi::default().addr_make(CW20_ADDRESS)),
+            vec![(UNBONDING_PERIOD, Decimal256::one())],
         )
         .unwrap_err();
 
@@ -2141,26 +2220,26 @@ mod tests {
         // try to create distribution flow for staking token
         let _res = execute_create_distribution_flow(
             deps.as_mut(),
-            mock_info(INIT_ADMIN, &[]),
-            INIT_ADMIN.to_string(),
+            message_info(&MockApi::default().addr_make(INIT_ADMIN), &[]),
+            MockApi::default().addr_make(INIT_ADMIN).to_string(),
             native_asset_info(DENOM),
-            vec![(UNBONDING_PERIOD, Decimal::one())],
+            vec![(UNBONDING_PERIOD, Decimal256::one())],
         )
         .unwrap();
         let err = execute_fund_distribution(
             mock_env(),
             deps.as_mut(),
             mock_info(
-                INIT_ADMIN,
+                &MockApi::default().addr_make(INIT_ADMIN),
                 &[Coin {
                     denom: DENOM.to_string(),
-                    amount: Uint128::zero(),
+                    amount: Uint256::zero(),
                 }],
             ),
             FundingInfo {
                 start_time: mock_env().block.time.seconds(),
                 distribution_duration: mock_env().block.time.seconds() + 10u64,
-                amount: Uint128::new(1),
+                amount: Uint256::new(1),
             },
         )
         .unwrap_err();
@@ -2176,10 +2255,10 @@ mod tests {
         // try to create distribution flow with wrong unbonding period
         let err = execute_create_distribution_flow(
             deps.as_mut(),
-            mock_info(INIT_ADMIN, &[]),
-            INIT_ADMIN.to_string(),
+            message_info(&MockApi::default().addr_make(INIT_ADMIN), &[]),
+            MockApi::default().addr_make(INIT_ADMIN).to_string(),
             native_asset_info(DENOM),
-            vec![(UNBONDING_PERIOD + 1, Decimal::one())],
+            vec![(UNBONDING_PERIOD + 1, Decimal256::one())],
         )
         .unwrap_err();
         assert_eq!(err, ContractError::InvalidRewards {});
@@ -2193,13 +2272,13 @@ mod tests {
         execute_receive(
             deps.as_mut(),
             mock_env(),
-            mock_info(CW20_ADDRESS, &[]),
+            mock_info(&MockApi::default().addr_make(CW20_ADDRESS), &[]),
             Cw20ReceiveMsg {
-                sender: "delegator".to_string(),
+                sender: MockApi::default().addr_make("delegator").to_string(),
                 amount: 100u128.into(),
                 msg: to_json_binary(&ReceiveMsg::Delegate {
                     unbonding_period: UNBONDING_PERIOD,
-                    delegate_as: Some("owner_of_stake".to_string()),
+                    delegate_as: Some(MockApi::default().addr_make("owner_of_stake").to_string()),
                 })
                 .unwrap(),
             },
@@ -2210,12 +2289,11 @@ mod tests {
         let stake = query_staked(
             deps.as_ref(),
             &mock_env(),
-            "owner_of_stake".to_string(),
+            MockApi::default().addr_make("owner_of_stake").to_string(),
             UNBONDING_PERIOD,
         )
         .unwrap()
-        .stake
-        .u128();
-        assert_eq!(stake, 100u128);
+        .stake;
+        assert_eq!(Uint128::try_from(stake).unwrap().u128(), 100u128);
     }
 }

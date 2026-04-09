@@ -1,5 +1,5 @@
 use cosmwasm_std::{
-    attr, entry_point, from_json, to_json_binary, Addr, Binary, CosmosMsg, Decimal, Deps, DepsMut,
+    attr, entry_point, from_json, to_json_binary, Addr, Binary, CosmosMsg, Decimal256, Deps, DepsMut,
     Env, MessageInfo, Order, Reply, ReplyOn, Response, StdError, StdResult, SubMsg, WasmMsg,
 };
 use cw2::ensure_from_older_version;
@@ -55,7 +55,7 @@ pub fn instantiate(
 ) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
-    if msg.max_referral_commission > Decimal::one() {
+    if msg.max_referral_commission > Decimal256::one() {
         return Err(ContractError::InvalidReferralCommission(
             msg.max_referral_commission,
         ));
@@ -362,7 +362,7 @@ fn execute_create_distribution_flow(
     info: MessageInfo,
     asset_infos: Vec<AssetInfo>,
     asset: AssetInfo,
-    rewards: Vec<(UnbondingPeriod, Decimal)>,
+    rewards: Vec<(UnbondingPeriod, Decimal256)>,
 ) -> Result<Response, ContractError> {
     // check permission
     if info.sender != CONFIG.load(deps.storage)?.owner {
@@ -587,18 +587,17 @@ fn execute_mark_pairs_as_migrated(
 pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> Result<Response, ContractError> {
     // parse the reply
 
-    let result = msg.result.into_result().map_err(StdError::generic_err)?;
+    let result = msg.result.into_result().map_err(StdError::msg)?;
     let res = cw_utils::parse_instantiate_response_data(
         result
             .msg_responses
             .get(0)
             .cloned()
             .map(|v| v.value)
-            .or(result.data)
             .unwrap()
             .as_slice(),
     )
-    .map_err(|_| StdError::parse_err("MsgInstantiateContractResponse", "failed to parse data"))?;
+    .map_err(|_| StdError::msg("failed to parse MsgInstantiateContractResponse"))?;
 
     reply::instantiate_pair(deps, env, res)
 }

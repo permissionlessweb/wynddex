@@ -1,9 +1,10 @@
 use cosmwasm_std::testing::{MockApi, MockQuerier, MockStorage, MOCK_CONTRACT_ADDR};
 use cosmwasm_std::{
-    from_json, to_json_binary, Addr, Coin, Decimal, Empty, OwnedDeps, Querier, QuerierResult,
+    from_json, to_json_binary, Addr, Coin, Decimal256, Empty, OwnedDeps, Querier, QuerierResult,
     QueryRequest, SystemError, SystemResult, Uint128, WasmQuery,
 };
 use std::collections::HashMap;
+use wyndex_test_helpers::TestAccounts;
 
 use cw20::{BalanceResponse, Cw20QueryMsg, TokenInfoResponse};
 use wyndex::factory::{
@@ -79,13 +80,17 @@ impl Querier for WasmMockQuerier {
 
 impl WasmMockQuerier {
     pub fn handle_query(&self, request: &QueryRequest<Empty>) -> QuerierResult {
+        let a = TestAccounts::new(&MockApi::default());
+        let factory_addr = a.beneficiary;
+        let fee_address = a.fee_receiver;
+        let owner = a.owner;
         match &request {
             QueryRequest::Wasm(WasmQuery::Smart { contract_addr, msg }) => {
-                if contract_addr == "factory" {
+                if contract_addr == factory_addr.as_str() {
                     match from_json(msg).unwrap() {
                         FeeInfo { .. } => SystemResult::Ok(
                             to_json_binary(&FeeInfoResponse {
-                                fee_address: Some(Addr::unchecked("fee_address")),
+                                fee_address: Some(fee_address),
                                 total_fee_bps: 30,
                                 protocol_fee_bps: 1660,
                             })
@@ -93,11 +98,11 @@ impl WasmMockQuerier {
                         ),
                         Config {} => SystemResult::Ok(
                             to_json_binary(&ConfigResponse {
-                                owner: Addr::unchecked("owner"),
+                                owner,
                                 pair_configs: vec![],
                                 token_code_id: 0,
-                                fee_address: Some(Addr::unchecked("fee_address")),
-                                max_referral_commission: Decimal::one(),
+                                fee_address: Some(fee_address),
+                                max_referral_commission: Decimal256::one(),
                                 only_owner_can_create_pairs: true,
                                 trading_starts: None,
                             })
@@ -127,7 +132,7 @@ impl WasmMockQuerier {
                                     name: "mAPPL".to_string(),
                                     symbol: "mAPPL".to_string(),
                                     decimals: 6,
-                                    total_supply,
+                                    total_supply: total_supply.into(),
                                 })
                                 .into(),
                             )
@@ -149,7 +154,10 @@ impl WasmMockQuerier {
                             };
 
                             SystemResult::Ok(
-                                to_json_binary(&BalanceResponse { balance: *balance }).into(),
+                                to_json_binary(&BalanceResponse {
+                                    balance: (*balance).into(),
+                                })
+                                .into(),
                             )
                         }
                         _ => panic!("DO NOT ENTER HERE"),
@@ -157,7 +165,7 @@ impl WasmMockQuerier {
                 }
             }
             QueryRequest::Wasm(WasmQuery::Raw { contract_addr, .. }) => {
-                if contract_addr == "factory" {
+                if contract_addr == factory_addr.as_str() {
                     SystemResult::Ok(to_json_binary(&Vec::<Addr>::new()).into())
                 } else {
                     panic!("DO NOT ENTER HERE");

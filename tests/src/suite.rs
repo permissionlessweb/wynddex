@@ -130,7 +130,7 @@ impl SuiteBuilder {
     #[track_caller]
     pub fn build(self) -> Suite {
         let mut app = App::default();
-        let owner = Addr::unchecked("owner");
+        let owner = owner;
 
         let cw20_code_id = store_cw20(&mut app);
         let pair_code_id = store_pair(&mut app);
@@ -226,14 +226,14 @@ impl Suite {
 
     pub fn create_pair(
         &mut self,
-        sender: &str,
+        sender: &Addr,
         pair_type: PairType,
         tokens: [AssetInfo; 2],
         staking_config: Option<PartialStakeConfig>,
         total_fee_bps: Option<u16>,
     ) -> AnyResult<Addr> {
         self.app.execute_contract(
-            Addr::unchecked(sender),
+            sender,
             self.factory.clone(),
             &FactoryExecuteMsg::CreatePair {
                 pair_type,
@@ -247,7 +247,7 @@ impl Suite {
 
         let factory = self.factory.clone();
         let res: PairInfo = self.app.wrap().query_wasm_smart(
-            Addr::unchecked(factory),
+            factory,
             &FactoryQueryMsg::Pair {
                 asset_infos: tokens.to_vec(),
             },
@@ -257,14 +257,14 @@ impl Suite {
 
     pub fn create_pair_and_distributions(
         &mut self,
-        sender: &str,
+        sender: &Addr,
         pair_type: PairType,
         asset_infos: Vec<AssetInfo>,
         staking_config: Option<PartialStakeConfig>,
         distribution_flows: Vec<DistributionFlow>,
     ) -> AnyResult<AppResponse> {
         self.app.execute_contract(
-            Addr::unchecked(sender),
+            sender,
             self.factory.clone(),
             &FactoryExecuteMsg::CreatePairAndDistributionFlows {
                 pair_type,
@@ -286,7 +286,7 @@ impl Suite {
         send_funds: &[Coin],
     ) -> AnyResult<AppResponse> {
         self.app.execute_contract(
-            Addr::unchecked(owner),
+            owner,
             pair.clone(),
             &PairExecuteMsg::ProvideLiquidity {
                 assets: assets.to_vec(),
@@ -305,7 +305,7 @@ impl Suite {
         amount: u128,
     ) -> AnyResult<AppResponse> {
         self.app.execute_contract(
-            Addr::unchecked(owner),
+            owner,
             contract.clone(),
             &Cw20ExecuteMsg::IncreaseAllowance {
                 spender: spender.to_owned(),
@@ -344,7 +344,7 @@ impl Suite {
                 // Increases allowances for given LP contracts in order to provide liquidity to pool
                 self.increase_allowance(
                     whale,
-                    &Addr::unchecked(addr),
+                    &addr,
                     pair.as_str(),
                     first_asset.1,
                 )
@@ -367,7 +367,7 @@ impl Suite {
                 // Increases allowances for given LP contracts in order to provide liquidity to pool
                 self.increase_allowance(
                     whale,
-                    &Addr::unchecked(addr),
+                    &addr,
                     pair.as_str(),
                     second_asset.1,
                 )
@@ -406,13 +406,13 @@ impl Suite {
     /// Create a distribution flow through the factory contract
     pub fn create_distribution_flow(
         &mut self,
-        sender: &str,
+        sender: &Addr,
         asset_infos: Vec<AssetInfo>,
         asset: AssetInfo,
         rewards: Vec<(UnbondingPeriod, Decimal)>,
     ) -> AnyResult<AppResponse> {
         self.app.execute_contract(
-            Addr::unchecked(sender),
+            sender,
             self.factory.clone(),
             &FactoryExecuteMsg::CreateDistributionFlow {
                 asset_infos,
@@ -426,22 +426,22 @@ impl Suite {
     pub fn distribute_funds(
         &mut self,
         staking_contract: Addr,
-        sender: &str,
+        sender: &Addr,
         funds: &[Coin],
     ) -> AnyResult<AppResponse> {
         self.app.execute_contract(
-            Addr::unchecked(sender),
+            sender,
             staking_contract,
             &StakeExecuteMsg::DistributeRewards { sender: None },
             funds,
         )
     }
 
-    pub fn instantiate_token(&mut self, owner: &str, token: &str) -> Addr {
+    pub fn instantiate_token(&mut self, owner: &Addr, token: &str) -> Addr {
         self.app
             .instantiate_contract(
                 self.cw20_code_id,
-                Addr::unchecked(owner),
+                owner,
                 &Cw20BaseInstantiateMsg {
                     name: token.to_owned(),
                     symbol: token.to_owned(),
@@ -462,13 +462,13 @@ impl Suite {
 
     pub fn mint_cw20(
         &mut self,
-        owner: &str,
+        owner: &Addr,
         token: &Addr,
         amount: u128,
         recipient: &str,
     ) -> AnyResult<AppResponse> {
         self.app.execute_contract(
-            Addr::unchecked(owner),
+            owner,
             token.clone(),
             &Cw20ExecuteMsg::Mint {
                 recipient: recipient.to_owned(),
@@ -480,14 +480,14 @@ impl Suite {
 
     pub fn send_cw20(
         &mut self,
-        owner: &str,
+        owner: &Addr,
         token: &Addr,
         amount: u128,
         contract: &str,
         msg: impl Serialize,
     ) -> AnyResult<AppResponse> {
         self.app.execute_contract(
-            Addr::unchecked(owner),
+            owner,
             token.clone(),
             &Cw20ExecuteMsg::Send {
                 contract: contract.to_owned(),
@@ -500,7 +500,7 @@ impl Suite {
 
     pub fn swap_operations(
         &mut self,
-        sender: &str,
+        sender: &Addr,
         amount: Coin,
         operations: Vec<SwapOperation>,
     ) -> AnyResult<AppResponse> {
@@ -509,14 +509,14 @@ impl Suite {
 
     pub fn swap_operations_ref(
         &mut self,
-        sender: &str,
+        sender: &Addr,
         amount: Coin,
         operations: Vec<SwapOperation>,
         referral_address: impl Into<Option<String>>,
         referral_commission: impl Into<Option<Decimal>>,
     ) -> AnyResult<AppResponse> {
         self.app.execute_contract(
-            Addr::unchecked(sender),
+            sender,
             self.multi_hop.clone(),
             &ExecuteMsg::ExecuteSwapOperations {
                 operations,
@@ -532,7 +532,7 @@ impl Suite {
 
     pub fn swap_operations_cw20(
         &mut self,
-        sender: &str,
+        sender: &Addr,
         token_in: &Addr,
         amount: u128,
         operations: Vec<SwapOperation>,
@@ -542,7 +542,7 @@ impl Suite {
 
     pub fn swap_operations_cw20_ref(
         &mut self,
-        sender: &str,
+        sender: &Addr,
         token_in: &Addr,
         amount: u128,
         operations: Vec<SwapOperation>,
@@ -550,7 +550,7 @@ impl Suite {
         referral_commission: impl Into<Option<Decimal>>,
     ) -> AnyResult<AppResponse> {
         self.app.execute_contract(
-            Addr::unchecked(sender),
+            sender,
             token_in.clone(),
             &Cw20ExecuteMsg::Send {
                 contract: self.multi_hop.to_string(),
@@ -588,16 +588,12 @@ impl Suite {
         )
     }
 
-    pub fn query_balance(&self, sender: &str, denom: &str) -> AnyResult<u128> {
-        let amount = self
-            .app
-            .wrap()
-            .query_balance(Addr::unchecked(sender), denom)?
-            .amount;
+    pub fn query_balance(&self, sender: &Addr, denom: &str) -> AnyResult<u128> {
+        let amount = self.app.wrap().query_balance(sender, denom)?.amount;
         Ok(amount.into())
     }
 
-    pub fn query_cw20_balance(&self, sender: &str, address: &Addr) -> AnyResult<u128> {
+    pub fn query_cw20_balance(&self, sender: &Addr, address: &Addr) -> AnyResult<u128> {
         let balance: BalanceResponse = self.app.wrap().query_wasm_smart(
             address,
             &Cw20QueryMsg::Balance {

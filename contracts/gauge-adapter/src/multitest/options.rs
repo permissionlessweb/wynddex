@@ -1,4 +1,3 @@
-use cosmwasm_std::Addr;
 use wyndex::asset::AssetInfo;
 
 use crate::multitest::suite::SuiteBuilder;

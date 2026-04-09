@@ -1,6 +1,8 @@
 use anyhow::Result as AnyResult;
 
-use cosmwasm_std::{coin, to_binary, Addr, Coin, CosmosMsg, Decimal, Uint128};
+use cosmwasm_std::{
+    coin, to_json_binary, Addr, Coin, CosmosMsg, Decimal, Decimal256, Uint128, Uint256,
+};
 use cw20::{BalanceResponse, Cw20ExecuteMsg, Cw20QueryMsg, MinterResponse};
 use cw20_base::msg::InstantiateMsg as Cw20BaseInstantiateMsg;
 use cw_multi_test::{App, AppResponse, BankSudo, ContractWrapper, Executor, SudoMsg};
@@ -105,14 +107,14 @@ impl SuiteBuilder {
             funds: vec![],
             stake_config: DefaultStakeConfig {
                 staking_code_id: 0, // will be set in build()
-                tokens_per_power: Uint128::new(1000),
-                min_bond: Uint128::new(1000),
+                tokens_per_power: Uint256::from(1000u128),
+                min_bond: Uint256::from(1000u128),
                 unbonding_periods: vec![],
                 max_distributions: 6,
                 converter: None,
             },
             reward: Asset {
-                amount: Uint128::zero(),
+                amount: Uint128::zero().into(),
                 info: AssetInfo::Native("juno".to_string()),
             },
             via_placeholder: false,
@@ -120,7 +122,12 @@ impl SuiteBuilder {
     }
 
     pub fn with_funds(mut self, addr: &str, funds: &[Coin]) -> Self {
-        self.funds.push((Addr::unchecked(addr), funds.into()));
+        // Use addr_make so bank balances are initialised for the same bech32
+        // address that contract interactions will use.
+        self.funds.push((
+            cosmwasm_std::testing::MockApi::default().addr_make(addr),
+            funds.into(),
+        ));
         self
     }
 
@@ -192,7 +199,7 @@ impl SuiteBuilder {
                     token_code_id: cw20_code_id,
                     fee_address: None,
                     owner: owner.to_string(),
-                    max_referral_commission: Decimal::one(),
+                    max_referral_commission: Decimal256::one(),
                     default_stake_config: DefaultStakeConfig {
                         staking_code_id,
                         ..self.stake_config
@@ -272,7 +279,7 @@ impl SuiteBuilder {
             contract_addr
         };
 
-        app.init_modules(|router, _, storage| -> AnyResult<()> {
+        app.init_modules(|router, _, storage| -> cosmwasm_std::StdResult<()> {
             for (addr, coin) in self.funds {
                 router.bank.init_balance(storage, &addr, coin)?;
             }
@@ -281,13 +288,12 @@ impl SuiteBuilder {
         .unwrap();
 
         Suite {
-            owner: owner.to_string(),
+            owner: "owner".to_string(),
             app,
             factory,
             gauge_adapter,
             cw20_code_id,
             reward: self.reward,
-            epoch_length,
         }
     }
 }
@@ -299,7 +305,6 @@ pub struct Suite {
     pub gauge_adapter: Addr,
     cw20_code_id: u64,
     pub reward: Asset,
-    pub epoch_length: u64,
 }
 
 impl Suite {
@@ -345,9 +350,9 @@ impl Suite {
         sender: &str,
         pair_type: PairType,
         tokens: [AssetInfo; 2],
-    ) -> AnyResult<PairContract> {
+    ) -> cosmwasm_std::StdResult<PairContract> {
         self.app.execute_contract(
-            Addr::unchecked(sender),
+            self.app.api().addr_make(sender),
             self.factory.clone(),
             &FactoryExecuteMsg::CreatePair {
                 pair_type,
@@ -361,7 +366,7 @@ impl Suite {
 
         let factory = self.factory.clone();
         let res: PairInfo = self.app.wrap().query_wasm_smart(
-            Addr::unchecked(factory),
+            factory,
             &FactoryQueryMsg::Pair {
                 asset_infos: tokens.to_vec(),
             },
@@ -375,12 +380,12 @@ impl Suite {
         contract: &Addr,
         spender: &str,
         amount: u128,
-    ) -> AnyResult<AppResponse> {
+    ) -> cosmwasm_std::StdResult<AppResponse> {
         self.app.execute_contract(
-            Addr::unchecked(owner),
+            self.app.api().addr_make(owner),
             contract.clone(),
             &Cw20ExecuteMsg::IncreaseAllowance {
-                spender: spender.to_owned(),
+                spender: spender.to_owned(), // spender is a contract address, not a human name
                 amount: amount.into(),
                 expires: None,
             },
@@ -396,10 +401,10 @@ impl Suite {
         first_asset: (AssetInfo, u128),
         second_asset: (AssetInfo, u128),
         native_tokens: Vec<Coin>,
-    ) -> AnyResult<PairContract> {
-        let owner = self.owner.clone();
-        let whale = self.app.api().addr_make("whale");
-        let whale = whale.as_str();
+    ) -> cosmwasm_std::StdResult<PairContract> {
+        let owner = self.owner.clone(); // human name, methods use addr_make internally
+        let whale_name = "whale";
+        let whale_addr = self.app.api().addr_make(whale_name);
 
         let pair = self.create_pair(
             &owner,
@@ -410,12 +415,12 @@ impl Suite {
         match first_asset.0.clone() {
             AssetInfo::Token(addr) => {
                 // Mint some initial balances for whale user
-                self.mint_cw20(&owner, &Addr::unchecked(&addr), first_asset.1, whale)
+                self.mint_cw20(&owner, &Addr::unchecked(&addr), first_asset.1, whale_name)
                     .unwrap();
                 // Increases allowances for given LP contracts in order to provide liquidity to pool
                 self.increase_allowance(
-                    whale,
-                    &Addr::unchecked(addr),
+                    whale_name,
+                    &Addr::unchecked(&addr),
                     pair.0.as_str(),
                     first_asset.1,
                 )
@@ -424,7 +429,7 @@ impl Suite {
             AssetInfo::Native(denom) => {
                 self.app
                     .sudo(SudoMsg::Bank(BankSudo::Mint {
-                        to_address: whale.to_owned(),
+                        to_address: whale_addr.to_string(),
                         amount: vec![coin(first_asset.1, denom)],
                     }))
                     .unwrap();
@@ -433,12 +438,12 @@ impl Suite {
         match second_asset.0.clone() {
             AssetInfo::Token(addr) => {
                 // Mint some initial balances for whale user
-                self.mint_cw20(&owner, &Addr::unchecked(&addr), second_asset.1, whale)
+                self.mint_cw20(&owner, &Addr::unchecked(&addr), second_asset.1, whale_name)
                     .unwrap();
                 // Increases allowances for given LP contracts in order to provide liquidity to pool
                 self.increase_allowance(
-                    whale,
-                    &Addr::unchecked(addr),
+                    whale_name,
+                    &Addr::unchecked(&addr),
                     pair.0.as_str(),
                     second_asset.1,
                 )
@@ -447,7 +452,7 @@ impl Suite {
             AssetInfo::Native(denom) => {
                 self.app
                     .sudo(SudoMsg::Bank(BankSudo::Mint {
-                        to_address: whale.to_owned(),
+                        to_address: whale_addr.to_string(),
                         amount: vec![coin(second_asset.1, denom)],
                     }))
                     .unwrap();
@@ -456,7 +461,7 @@ impl Suite {
 
         pair.provide_liquidity(
             &mut self.app,
-            whale,
+            &whale_addr,
             [
                 Asset {
                     info: first_asset.0,
@@ -480,10 +485,10 @@ impl Suite {
         sender: &str,
         asset_infos: Vec<AssetInfo>,
         asset: AssetInfo,
-        rewards: Vec<(UnbondingPeriod, Decimal)>,
-    ) -> AnyResult<AppResponse> {
+        rewards: Vec<(UnbondingPeriod, Decimal256)>,
+    ) -> cosmwasm_std::StdResult<AppResponse> {
         self.app.execute_contract(
-            Addr::unchecked(sender),
+            self.app.api().addr_make(sender),
             self.factory.clone(),
             &FactoryExecuteMsg::CreateDistributionFlow {
                 asset_infos,
@@ -495,17 +500,18 @@ impl Suite {
     }
 
     pub fn instantiate_token(&mut self, owner: &str, token: &str) -> Addr {
+        let owner_addr = self.app.api().addr_make(owner);
         self.app
             .instantiate_contract(
                 self.cw20_code_id,
-                Addr::unchecked(owner),
+                owner_addr.clone(),
                 &Cw20BaseInstantiateMsg {
                     name: token.to_owned(),
                     symbol: token.to_owned(),
                     decimals: 6,
                     initial_balances: vec![],
                     mint: Some(MinterResponse {
-                        minter: owner.to_string(),
+                        minter: owner_addr.to_string(),
                         cap: None,
                     }),
                     marketing: None,
@@ -523,12 +529,12 @@ impl Suite {
         token: &Addr,
         amount: u128,
         recipient: &str,
-    ) -> AnyResult<AppResponse> {
+    ) -> cosmwasm_std::StdResult<AppResponse> {
         self.app.execute_contract(
-            Addr::unchecked(owner),
+            self.app.api().addr_make(owner),
             token.clone(),
             &Cw20ExecuteMsg::Mint {
-                recipient: recipient.to_owned(),
+                recipient: self.app.api().addr_make(recipient).to_string(),
                 amount: amount.into(),
             },
             &[],
@@ -547,17 +553,21 @@ impl Suite {
         msgs.execute
     }
 
-    pub fn query_cw20_balance(&self, user: &str, contract: &Addr) -> AnyResult<u128> {
+    pub fn query_cw20_balance(
+        &self,
+        user: &str,
+        contract: &Addr,
+    ) -> cosmwasm_std::StdResult<Uint256> {
         let balance: BalanceResponse = self.app.wrap().query_wasm_smart(
             contract,
             &Cw20QueryMsg::Balance {
-                address: user.to_owned(),
+                address: user.to_owned(), // caller must supply a valid bech32 address
             },
         )?;
-        Ok(balance.balance.into())
+        Ok(Uint256::from(balance.balance))
     }
 
-    pub fn query_all_options(&self) -> AnyResult<Vec<String>> {
+    pub fn query_all_options(&self) -> cosmwasm_std::StdResult<Vec<String>> {
         let res: AllOptionsResponse = self
             .app
             .wrap()
@@ -566,7 +576,7 @@ impl Suite {
         Ok(res.options)
     }
 
-    pub fn query_check_option(&self, option: String) -> AnyResult<bool> {
+    pub fn query_check_option(&self, option: String) -> cosmwasm_std::StdResult<bool> {
         let res: CheckOptionResponse = self.app.wrap().query_wasm_smart(
             self.gauge_adapter.clone(),
             &AdapterQueryMsg::CheckOption { option },
@@ -579,7 +589,7 @@ impl Suite {
 pub struct PairContract(pub Addr);
 
 impl PairContract {
-    pub fn query_pair_info(&self, app: &App) -> AnyResult<PairInfo> {
+    pub fn query_pair_info(&self, app: &App) -> cosmwasm_std::StdResult<PairInfo> {
         Ok(app
             .wrap()
             .query_wasm_smart(&self.0, &PairQueryMsg::Pair {})?)
@@ -588,12 +598,12 @@ impl PairContract {
     pub fn provide_liquidity(
         &self,
         app: &mut App,
-        owner: &str,
+        owner: &Addr,
         assets: [Asset; 2],
         send_funds: &[Coin],
-    ) -> AnyResult<AppResponse> {
+    ) -> cosmwasm_std::StdResult<AppResponse> {
         app.execute_contract(
-            Addr::unchecked(owner),
+            owner.to_owned(),
             self.0.clone(),
             &PairExecuteMsg::ProvideLiquidity {
                 assets: assets.to_vec(),
@@ -615,14 +625,14 @@ impl StakingContract {
         amount: u128,
         unbonding_period: u64,
         token: Addr,
-    ) -> AnyResult<AppResponse> {
+    ) -> cosmwasm_std::StdResult<AppResponse> {
         app.execute_contract(
-            Addr::unchecked(owner),
+            app.api().addr_make(owner),
             token,
             &Cw20ExecuteMsg::Send {
                 contract: self.0.to_string(),
                 amount: amount.into(),
-                msg: to_binary(&ReceiveMsg::Delegate {
+                msg: to_json_binary(&ReceiveMsg::Delegate {
                     unbonding_period,
                     delegate_as: None,
                 })
@@ -642,16 +652,20 @@ impl StakingContract {
             .query_wasm_smart(
                 &self.0,
                 &StakingQueryMsg::WithdrawableRewards {
-                    owner: owner.to_string(),
+                    owner: app.api().addr_make(owner).to_string(),
                 },
             )
             .unwrap();
         Ok(rewards.rewards)
     }
 
-    pub fn withdraw_rewards(&self, app: &mut App, owner: &str) -> AnyResult<AppResponse> {
+    pub fn withdraw_rewards(
+        &self,
+        app: &mut App,
+        owner: &str,
+    ) -> cosmwasm_std::StdResult<AppResponse> {
         app.execute_contract(
-            Addr::unchecked(owner),
+            app.api().addr_make(owner),
             self.0.clone(),
             &StakingExecuteMsg::WithdrawRewards {
                 owner: None,
@@ -661,9 +675,13 @@ impl StakingContract {
         )
     }
 
-    pub fn distribute_rewards(&self, app: &mut App, owner: &str) -> AnyResult<AppResponse> {
+    pub fn distribute_rewards(
+        &self,
+        app: &mut App,
+        owner: &str,
+    ) -> cosmwasm_std::StdResult<AppResponse> {
         app.execute_contract(
-            Addr::unchecked(owner),
+            app.api().addr_make(owner),
             self.0.clone(),
             &StakingExecuteMsg::DistributeRewards { sender: None },
             &[],

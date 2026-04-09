@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use wyndex::utils::Curve;
 
 use crate::{utils::calc_power, ContractError};
-use cosmwasm_std::{Addr, Decimal, Env, OverflowError, StdResult, Storage, Timestamp, Uint128};
+use cosmwasm_std::{Addr, Decimal256, Env, OverflowError, StdResult, Storage, Timestamp, Uint256};
 use cw_controllers::{Admin, Claims};
 use cw_storage_plus::{Item, Map};
 use wyndex::asset::AssetInfoValidated;
@@ -17,8 +17,8 @@ pub struct Config {
     pub cw20_contract: Addr,
     /// address that instantiated the contract
     pub instantiator: Addr,
-    pub tokens_per_power: Uint128,
-    pub min_bond: Uint128,
+    pub tokens_per_power: Uint256,
+    pub min_bond: Uint256,
     /// configured unbonding periods in seconds
     pub unbonding_periods: Vec<UnbondingPeriod>,
     /// the maximum number of distributions that can be created
@@ -43,14 +43,14 @@ pub struct ConverterConfig {
 #[derive(Default)]
 pub struct BondingInfo {
     /// the amount of staked tokens which are not locked
-    stake: Uint128,
+    stake: Uint256,
     /// Vec of locked_tokens sorted by expiry timestamp
-    locked_tokens: Vec<(Timestamp, Uint128)>,
+    locked_tokens: Vec<(Timestamp, Uint256)>,
 }
 
 impl BondingInfo {
     /// Add an amount of tokens to the stake
-    pub fn add_unlocked_tokens(&mut self, amount: Uint128) -> Uint128 {
+    pub fn add_unlocked_tokens(&mut self, amount: Uint256) -> Uint256 {
         let tokens = self.stake.checked_add(amount).unwrap();
 
         self.stake = tokens;
@@ -59,7 +59,7 @@ impl BondingInfo {
     }
 
     /// Inserts a new locked_tokens entry in its correct place with a provided expires Timestamp and an amount
-    pub fn add_locked_tokens(&mut self, expires: Timestamp, amount: Uint128) {
+    pub fn add_locked_tokens(&mut self, expires: Timestamp, amount: Uint256) {
         // Insert the new locked_tokens entry into its correct place using a binary search and an insert
         match self.locked_tokens.binary_search(&(expires, amount)) {
             Ok(pos) => self.locked_tokens[pos].1 += amount,
@@ -80,13 +80,13 @@ impl BondingInfo {
             .partition(|(time, _)| time <= &env.block.time);
         self.locked_tokens = remaining;
 
-        self.stake += unlocked.into_iter().map(|(_, v)| v).sum::<Uint128>();
+        self.stake += unlocked.into_iter().map(|(_, v)| v).sum::<Uint256>();
     }
 
     /// Attempt to release an amount of stake. First releasing any already unlocked tokens
     /// and then subtracting the requested amount from stake.
     /// On success, returns total_unlocked() after reducing the stake by this amount.
-    pub fn release_stake(&mut self, env: &Env, amount: Uint128) -> Result<Uint128, OverflowError> {
+    pub fn release_stake(&mut self, env: &Env, amount: Uint256) -> Result<Uint256, OverflowError> {
         self.free_unlocked_tokens(env);
 
         let new_stake = self.stake.checked_sub(amount)?;
@@ -98,8 +98,8 @@ impl BondingInfo {
 
     /// Releases all locked stake, regardless of its bonding time
     /// On success, returns the unlocked stake (which is also the total stake)
-    pub fn force_unlock_all(&mut self) -> Result<Uint128, OverflowError> {
-        let locked: Uint128 = self.locked_tokens.iter().map(|(_, amount)| amount).sum();
+    pub fn force_unlock_all(&mut self) -> Result<Uint256, OverflowError> {
+        let locked: Uint256 = self.locked_tokens.iter().map(|(_, amount)| amount).sum();
         self.stake = self.stake.checked_add(locked)?;
         self.locked_tokens = vec![];
         Ok(self.stake)
@@ -107,31 +107,31 @@ impl BondingInfo {
 
     /// Return all locked tokens at a given block time that is all
     /// locked_tokens with a Timestamp > the block time passed in env as a param
-    pub fn total_locked(&self, env: &Env) -> Uint128 {
+    pub fn total_locked(&self, env: &Env) -> Uint256 {
         let locked_stake = self
             .locked_tokens
             .iter()
             .filter_map(|(t, v)| if t > &env.block.time { Some(v) } else { None })
-            .sum::<Uint128>();
+            .sum::<Uint256>();
         locked_stake
     }
 
     /// Return all locked tokens at a given block time that is all
     /// locked_tokens with a Timestamp > the block time passed in env as a param
-    pub fn total_unlocked(&self, env: &Env) -> Uint128 {
-        let mut unlocked_stake: Uint128 = self.stake;
+    pub fn total_unlocked(&self, env: &Env) -> Uint256 {
+        let mut unlocked_stake: Uint256 = self.stake;
         unlocked_stake += self
             .locked_tokens
             .iter()
             .filter_map(|(t, v)| if t <= &env.block.time { Some(v) } else { None })
-            .sum::<Uint128>();
+            .sum::<Uint256>();
 
         unlocked_stake
     }
 
     /// Return all stake for this BondingInfo, including locked_tokens
-    pub fn total_stake(&self) -> Uint128 {
-        let total_stake: Uint128 = self
+    pub fn total_stake(&self) -> Uint256 {
+        let total_stake: Uint256 = self
             .stake
             .checked_add(self.locked_tokens.iter().map(|x| x.1).sum())
             .unwrap();
@@ -147,13 +147,13 @@ pub const CONFIG: Item<Config> = Item::new("config");
 #[derive(Default, Serialize, Deserialize)]
 pub struct TokenInfo {
     // how many tokens are fully bonded
-    pub staked: Uint128,
+    pub staked: Uint256,
     // how many tokens are unbounded and awaiting claim
-    pub unbonding: Uint128,
+    pub unbonding: Uint256,
 }
 
 impl TokenInfo {
-    pub fn total(&self) -> Uint128 {
+    pub fn total(&self) -> Uint256 {
         self.staked + self.unbonding
     }
 }
@@ -165,11 +165,11 @@ pub const STAKE: Map<(&Addr, UnbondingPeriod), BondingInfo> = Map::new("stake");
 #[derive(Default, Serialize, Deserialize)]
 pub struct TotalStake {
     /// Total stake
-    pub staked: Uint128,
+    pub staked: Uint256,
     /// Total stake minus any stake that is below min_bond by unbonding period.
     /// This is used when calculating the total staking power because we don't
     /// want to count stakes below min_bond into the total.
-    pub powered_stake: Uint128,
+    pub powered_stake: Uint256,
 }
 /// Total stake minus any stake that is below min_bond by unbonding period.
 /// This is used when calculating the total staking power because we don't
@@ -207,17 +207,17 @@ pub const SHARES_SHIFT: u8 = 32;
 #[cw_serde]
 pub struct Distribution {
     /// How many shares is single point worth
-    pub shares_per_point: Uint128,
+    pub shares_per_point: Uint256,
     /// Shares which were not fully distributed on previous distributions, and should be redistributed
     pub shares_leftover: u64,
     /// Total rewards distributed by this contract.
-    pub distributed_total: Uint128,
+    pub distributed_total: Uint256,
     /// Total rewards not yet withdrawn.
-    pub withdrawable_total: Uint128,
+    pub withdrawable_total: Uint256,
     /// The manager of this distribution
     pub manager: Addr,
     /// Rewards multiplier by unbonding period for this distribution
-    pub reward_multipliers: Vec<(UnbondingPeriod, Decimal)>,
+    pub reward_multipliers: Vec<(UnbondingPeriod, Decimal256)>,
 }
 
 impl Distribution {
@@ -225,7 +225,7 @@ impl Distribution {
     pub fn rewards_multiplier(
         &self,
         unbonding_period: UnbondingPeriod,
-    ) -> Result<Decimal, ContractError> {
+    ) -> Result<Decimal256, ContractError> {
         self.reward_multipliers
             .binary_search_by_key(&unbonding_period, |(period, _)| *period)
             .map(|idx| self.reward_multipliers[idx].1) // map to multiplier
@@ -237,7 +237,7 @@ impl Distribution {
         storage: &dyn Storage,
         cfg: &Config,
         period: UnbondingPeriod,
-    ) -> Result<Uint128, ContractError> {
+    ) -> Result<Uint256, ContractError> {
         let totals = TOTAL_PER_PERIOD.load(storage).unwrap_or_default();
         let total = totals
             .binary_search_by_key(&period, |(period, _)| *period)
@@ -247,7 +247,7 @@ impl Distribution {
     }
 
     /// Returns the total rewards power within this distribution.
-    pub fn total_rewards_power(&self, storage: &dyn Storage, cfg: &Config) -> Uint128 {
+    pub fn total_rewards_power(&self, storage: &dyn Storage, cfg: &Config) -> Uint256 {
         let totals = TOTAL_PER_PERIOD.load(storage).unwrap_or_default();
         self.reward_multipliers
             .iter()
@@ -262,7 +262,7 @@ impl Distribution {
                     calc_power(cfg, total_stake.powered_stake, multiplier)
                 },
             )
-            .sum::<Uint128>()
+            .sum::<Uint256>()
     }
 
     pub fn calc_rewards_power(
@@ -270,9 +270,9 @@ impl Distribution {
         storage: &dyn Storage,
         cfg: &Config,
         staker: &Addr,
-    ) -> StdResult<Uint128> {
+    ) -> StdResult<Uint256> {
         // get rewards for all unbonding periods
-        let mut power = Uint128::zero();
+        let mut power = Uint256::zero();
         for &(unbonding_period, multiplier) in self.reward_multipliers.iter() {
             let bonding_info = STAKE
                 .may_load(storage, (staker, unbonding_period))?
@@ -289,7 +289,7 @@ pub struct WithdrawAdjustment {
     /// How much points should be added/removed from calculated funds while withdrawal.
     pub shares_correction: i128,
     /// How much funds addresses already withdrawn.
-    pub withdrawn_rewards: Uint128,
+    pub withdrawn_rewards: Uint256,
 }
 
 /// Rewards distribution data
@@ -316,28 +316,28 @@ mod tests {
         let mut info = BondingInfo::default();
         let env = mock_env();
 
-        info.stake = info.add_unlocked_tokens(Uint128::new(1000u128));
+        info.stake = info.add_unlocked_tokens(Uint256::new(1000u128));
 
-        assert_eq!(info.total_unlocked(&env), Uint128::new(1000u128));
+        assert_eq!(info.total_unlocked(&env), Uint256::new(1000u128));
 
-        info.add_locked_tokens(env.block.time.plus_seconds(1000), Uint128::new(1000u128));
+        info.add_locked_tokens(env.block.time.plus_seconds(1000), Uint256::new(1000u128));
         assert_eq!(
             info.locked_tokens,
-            [(env.block.time.plus_seconds(1000), Uint128::new(1000u128))]
+            [(env.block.time.plus_seconds(1000), Uint256::new(1000u128))]
         );
-        assert_eq!(info.total_locked(&env), Uint128::new(1000u128))
+        assert_eq!(info.total_locked(&env), Uint256::new(1000u128))
     }
     #[test]
     fn test_bonding_info_add_then_release() {
         let mut info = BondingInfo::default();
         let env = mock_env();
 
-        info.stake = info.add_unlocked_tokens(Uint128::new(1000u128));
+        info.stake = info.add_unlocked_tokens(Uint256::new(1000u128));
 
-        info.add_locked_tokens(env.block.time.plus_seconds(1000), Uint128::new(1000u128));
+        info.add_locked_tokens(env.block.time.plus_seconds(1000), Uint256::new(1000u128));
         // Trying to release both locked and unlocked tokens fails
         let err = info
-            .release_stake(&env, Uint128::new(2000u128))
+            .release_stake(&env, Uint256::new(2000u128))
             .unwrap_err();
         assert_eq!(
             err,
@@ -346,7 +346,7 @@ mod tests {
             }
         );
         // But releasing the unlocked tokens passes
-        info.release_stake(&env, Uint128::new(1000u128)).unwrap();
+        info.release_stake(&env, Uint256::new(1000u128)).unwrap();
     }
 
     #[test]
@@ -354,18 +354,18 @@ mod tests {
         let mut info = BondingInfo::default();
         let env = mock_env();
 
-        info.stake = info.add_unlocked_tokens(Uint128::new(1000u128));
-        info.add_locked_tokens(env.block.time.plus_seconds(10), Uint128::new(1000u128));
+        info.stake = info.add_unlocked_tokens(Uint256::new(1000u128));
+        info.add_locked_tokens(env.block.time.plus_seconds(10), Uint256::new(1000u128));
 
-        info.stake = info.add_unlocked_tokens(Uint128::new(500u128));
-        info.add_locked_tokens(env.block.time.plus_seconds(20), Uint128::new(500u128));
+        info.stake = info.add_unlocked_tokens(Uint256::new(500u128));
+        info.add_locked_tokens(env.block.time.plus_seconds(20), Uint256::new(500u128));
 
-        info.stake = info.add_unlocked_tokens(Uint128::new(100u128));
-        info.add_locked_tokens(env.block.time.plus_seconds(30), Uint128::new(100u128));
+        info.stake = info.add_unlocked_tokens(Uint256::new(100u128));
+        info.add_locked_tokens(env.block.time.plus_seconds(30), Uint256::new(100u128));
 
-        assert_eq!(info.total_locked(&env), Uint128::new(1600u128));
-        assert_eq!(info.total_unlocked(&env), Uint128::new(1600u128));
-        assert_eq!(info.total_stake(), Uint128::new(3200u128));
+        assert_eq!(info.total_locked(&env), Uint256::new(1600u128));
+        assert_eq!(info.total_unlocked(&env), Uint256::new(1600u128));
+        assert_eq!(info.total_stake(), Uint256::new(3200u128));
     }
 
     #[test]
@@ -373,24 +373,24 @@ mod tests {
         let mut info = BondingInfo::default();
         let env = mock_env();
 
-        info.stake = info.add_unlocked_tokens(Uint128::new(1000u128));
+        info.stake = info.add_unlocked_tokens(Uint256::new(1000u128));
 
-        assert_eq!(info.total_unlocked(&env), Uint128::new(1000u128));
+        assert_eq!(info.total_unlocked(&env), Uint256::new(1000u128));
 
-        info.add_locked_tokens(env.block.time.minus_seconds(1000), Uint128::new(1000u128));
+        info.add_locked_tokens(env.block.time.minus_seconds(1000), Uint256::new(1000u128));
         assert_eq!(
             info.locked_tokens,
-            [(env.block.time.minus_seconds(1000), Uint128::new(1000u128))]
+            [(env.block.time.minus_seconds(1000), Uint256::new(1000u128))]
         );
 
-        info.add_locked_tokens(env.block.time.plus_seconds(1000), Uint128::new(1000u128));
+        info.add_locked_tokens(env.block.time.plus_seconds(1000), Uint256::new(1000u128));
 
-        assert_eq!(info.total_unlocked(&env), Uint128::new(2000u128));
+        assert_eq!(info.total_unlocked(&env), Uint256::new(2000u128));
         assert_eq!(
-            info.release_stake(&env, Uint128::new(1500u128)).unwrap(),
-            Uint128::new(500u128)
+            info.release_stake(&env, Uint256::new(1500u128)).unwrap(),
+            Uint256::new(500u128)
         );
-        assert_eq!(info.total_stake(), Uint128::new(1500));
-        assert_eq!(info.total_locked(&env), Uint128::new(1000u128));
+        assert_eq!(info.total_stake(), Uint256::new(1500));
+        assert_eq!(info.total_locked(&env), Uint256::new(1000u128));
     }
 }

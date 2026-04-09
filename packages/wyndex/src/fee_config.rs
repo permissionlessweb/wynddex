@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::Decimal;
+use cosmwasm_std::{Decimal, Decimal256};
 
 const MAX_TOTAL_FEE_BPS: u16 = 10_000;
 const MAX_PROTOCOL_FEE_BPS: u16 = 10_000;
@@ -20,11 +20,11 @@ impl FeeConfig {
         self.total_fee_bps <= MAX_TOTAL_FEE_BPS && self.protocol_fee_bps <= MAX_PROTOCOL_FEE_BPS
     }
 
-    pub fn total_fee_rate(&self) -> Decimal {
-        Decimal::from_ratio(self.total_fee_bps, 10_000u128)
+    pub fn total_fee_rate(&self) -> Decimal256 {
+        Decimal256::from_ratio(self.total_fee_bps, 10_000u128)
     }
 
-    pub fn protocol_fee_rate(&self) -> Decimal {
-        Decimal::from_ratio(self.protocol_fee_bps, 10_000u128)
+    pub fn protocol_fee_rate(&self) -> Decimal256 {
+        Decimal256::from_ratio(self.protocol_fee_bps, 10_000u128)
     }
 }

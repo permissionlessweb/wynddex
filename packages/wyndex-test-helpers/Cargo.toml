@@ -1,0 +1,10 @@
+[package]
+name = "wyndex-test-helpers"
+version = { workspace = true }
+edition = { workspace = true }
+description = "Reusable test accounts and helpers for Wyndex contract tests"
+license = { workspace = true }
+repository = { workspace = true }
+
+[dependencies]
+cosmwasm-std = { workspace = true }

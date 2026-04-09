@@ -1,11 +1,14 @@
-use cosmwasm_std::{Decimal, StdError, Uint128};
+use cosmwasm_std::{ConversionOverflowError, Decimal256, StdError, Uint256};
 use thiserror::Error;
 
 /// This enum describes factory contract errors
-#[derive(Error, Debug, PartialEq)]
+#[derive(Error, Debug)]
 pub enum ContractError {
     #[error("{0}")]
     Std(#[from] StdError),
+
+    #[error("{0}")]
+    ConversionOverflowError(#[from] ConversionOverflowError),
 
     #[error("Invalid value for trading start")]
     InvalidTradingStart {},
@@ -35,7 +38,7 @@ pub enum ContractError {
     DoublingAssets {},
 
     #[error("Invalid referral commision: {0}")]
-    InvalidReferralCommission(Decimal),
+    InvalidReferralCommission(Decimal256),
 
     #[error("Can only init upgrade from cw-placeholder")]
     NotPlaceholder,
@@ -44,8 +47,16 @@ pub enum ContractError {
     DepositNotSet {},
 
     #[error("Incorrect deposit: permissionless factory requires deposit as: {0}{1}")]
-    DepositRequired(Uint128, String),
+    DepositRequired(Uint256, String),
 
     #[error("Factory is in permissionless mode: deposit must be sent to create new pair")]
     PermissionlessRequiresDeposit {},
+}
+
+impl PartialEq for ContractError {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            _ => core::mem::discriminant(self) == core::mem::discriminant(other),
+        }
+    }
 }

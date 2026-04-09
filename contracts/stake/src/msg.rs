@@ -1,7 +1,7 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cw20::Cw20ReceiveMsg;
 
-use cosmwasm_std::{Addr, Decimal, Uint128};
+use cosmwasm_std::{Addr, Decimal256, Uint256};
 use wyndex::asset::{AssetInfo, AssetInfoValidated, AssetValidated};
 
 use wyndex::stake::{ConverterConfig, FundingInfo, UnbondingPeriod};
@@ -10,7 +10,7 @@ use wyndex::stake::{ConverterConfig, FundingInfo, UnbondingPeriod};
 pub enum ExecuteMsg {
     /// Rebond will update an amount of bonded tokens from one bond period to the other
     Rebond {
-        tokens: Uint128,
+        tokens: Uint256,
         // these must be valid time periods
         bond_from: u64,
         bond_to: u64,
@@ -19,7 +19,7 @@ pub enum ExecuteMsg {
     /// The sender immediately loses power from these tokens, and can claim them
     /// back to his wallet after `unbonding_period`
     Unbond {
-        tokens: Uint128,
+        tokens: Uint256,
         /// As each unbonding period in delegation corresponds to particular voting
         /// multiplier, unbonding_period needs to be passed in unbond as well
         unbonding_period: u64,
@@ -52,7 +52,7 @@ pub enum ExecuteMsg {
 
         /// Rewards multiplier by unbonding period for this distribution
         /// Only periods that are defined in the contract can be used here
-        rewards: Vec<(UnbondingPeriod, Decimal)>,
+        rewards: Vec<(UnbondingPeriod, Decimal256)>,
     },
 
     /// This accepts a properly-encoded ReceiveMsg from a cw20 contract
@@ -90,7 +90,7 @@ pub enum ExecuteMsg {
     /// Moves the given amount of LP tokens staked to the given unbonding period from the sender's
     /// account to a different pool (by converting one or more of the pool tokens).
     MigrateStake {
-        amount: Uint128,
+        amount: Uint256,
         unbonding_period: u64,
     },
 }
@@ -171,8 +171,8 @@ pub struct MigrateMsg {
 
 #[cw_serde]
 pub struct StakedResponse {
-    pub stake: Uint128,
-    pub total_locked: Uint128,
+    pub stake: Uint256,
+    pub total_locked: Uint256,
     pub unbonding_period: u64,
     pub cw20_contract: String,
 }
@@ -184,26 +184,26 @@ pub struct AllStakedResponse {
 
 #[cw_serde]
 pub struct TotalStakedResponse {
-    pub total_staked: Uint128,
+    pub total_staked: Uint256,
 }
 
 #[cw_serde]
 pub struct TotalUnbondingResponse {
-    pub total_unbonding: Uint128,
+    pub total_unbonding: Uint256,
 }
 
 #[cw_serde]
 pub struct RewardsPowerResponse {
     /// The rewards power of the address per asset
     /// This does not use `AssetValidated`, because the semantics are different.
-    /// The `Uint128` is not an actual asset amount, but the address' rewards power for that asset.
-    pub rewards: Vec<(AssetInfoValidated, Uint128)>,
+    /// The `Uint256` is not an actual asset amount, but the address' rewards power for that asset.
+    pub rewards: Vec<(AssetInfoValidated, Uint256)>,
 }
 
 #[cw_serde]
 pub struct BondingPeriodInfo {
     pub unbonding_period: u64,
-    pub total_staked: Uint128,
+    pub total_staked: Uint256,
 }
 
 #[cw_serde]
@@ -223,7 +223,7 @@ pub struct AnnualizedReward {
     /// The amount of tokens. the semantics of this are equivalent to [`AssetValidated`].
     /// This is a decimal value to reduce rounding when using it for further calculations.
     /// None means contract does not know the value - total_staked or total_power could be 0.
-    pub amount: Option<Decimal>,
+    pub amount: Option<Decimal256>,
 }
 
 // just for the proper json outputs

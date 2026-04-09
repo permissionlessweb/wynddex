@@ -4,7 +4,7 @@ use crate::{
     querier::query_factory_config,
 };
 
-use cosmwasm_std::{Addr, CosmosMsg, Decimal, Decimal256, QuerierWrapper, Uint128};
+use cosmwasm_std::{Addr, CosmosMsg, Decimal256, QuerierWrapper, Uint256};
 
 use super::ContractError;
 
@@ -16,7 +16,7 @@ use super::ContractError;
 pub fn handle_referral(
     factory_config: &ConfigResponse,
     referral_address: Option<Addr>,
-    referral_commission: Option<Decimal>,
+    referral_commission: Option<Decimal256>,
     offer_asset: &mut AssetValidated,
     messages: &mut Vec<CosmosMsg>,
 ) -> Result<(), ContractError> {
@@ -40,12 +40,12 @@ pub fn handle_referral(
 /// the factory cannot be queried.
 pub fn take_referral(
     factory_config: &ConfigResponse,
-    referral_commission: Option<Decimal>,
+    referral_commission: Option<Decimal256>,
     offer_asset: &mut AssetValidated,
-) -> Result<Uint128, ContractError> {
+) -> Result<Uint256, ContractError> {
     // no need to load factory config if there is no referral commission
-    if referral_commission == Some(Decimal::zero()) {
-        return Ok(Uint128::zero());
+    if referral_commission == Some(Decimal256::zero()) {
+        return Ok(Uint256::zero());
     }
 
     let referral_commission = referral_commission.unwrap_or(factory_config.max_referral_commission);
@@ -69,12 +69,12 @@ pub fn add_referral(
     querier: &QuerierWrapper,
     factory_addr: &Addr,
     referral: bool,
-    referral_commission: Option<Decimal>,
+    referral_commission: Option<Decimal256>,
     mut offer_asset: AssetValidated,
-) -> Result<(AssetValidated, Uint128), ContractError> {
+) -> Result<(AssetValidated, Uint256), ContractError> {
     // no need to load factory config if there is no referral commission
-    if !referral || referral_commission == Some(Decimal::zero()) {
-        return Ok((offer_asset, Uint128::zero()));
+    if !referral || referral_commission == Some(Decimal256::zero()) {
+        return Ok((offer_asset, Uint256::zero()));
     }
 
     let factory_config = query_factory_config(querier, factory_addr.to_string())?;
@@ -92,10 +92,10 @@ pub fn add_referral(
     let referral_commission: Decimal256 = referral_commission.into();
     let commission_amount = Decimal256::from_ratio(offer_asset.amount, 1u128) * referral_commission
         / (Decimal256::one() - referral_commission);
-    // We can safely convert back to Uint128, because the commission amount is always less than the offer asset amount.
-    let commission_amount: Uint128 = (commission_amount.to_uint_floor())
+    // We can safely convert back to Uint256, because the commission amount is always less than the offer asset amount.
+    let commission_amount: Uint256 = (commission_amount.to_uint_floor())
         .try_into()
-        .expect("commission_amount should fit into Uint128");
+        .expect("commission_amount should fit into Uint256");
     // subtract commission_amount from offer_asset
     offer_asset.amount += commission_amount;
 

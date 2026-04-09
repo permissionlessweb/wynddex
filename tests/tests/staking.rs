@@ -161,7 +161,7 @@ mod staking {
         let no_dist = "not_distributable";
 
         let owner = "owner";
-        let user = "user";
+       let user = MockApi::default().addr_make("user");
 
         let ujuno_info = AssetInfo::Native(ujuno.to_string());
         let uluna_info = AssetInfo::Native(uluna.to_string());

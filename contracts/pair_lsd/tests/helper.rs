@@ -2,7 +2,9 @@ use std::collections::HashMap;
 
 use anyhow::Result as AnyResult;
 use cosmwasm_std::testing::MockApi;
-use cosmwasm_std::{coin, to_json_binary, Addr, Coin, Decimal, Empty, StdResult, Uint128};
+use cosmwasm_std::{
+    coin, to_json_binary, Addr, Coin, Decimal256, Empty, StdResult, Uint128, Uint256,
+};
 use cw20::{BalanceResponse, Cw20Coin, Cw20ExecuteMsg, Cw20QueryMsg};
 use cw_multi_test::{App, AppResponse, Contract, ContractWrapper, Executor};
 use derivative::Derivative;
@@ -140,7 +142,7 @@ impl Helper {
         test_coins.into_iter().for_each(|coin| {
             if let Some((name, decimals)) = coin.cw20_init_data() {
                 let token_addr = Self::init_token(&mut app, token_code_id, name, decimals, owner);
-                asset_infos_vec.push((coin, token_asset_info(token_addr.as_str())))
+                asset_infos_vec.push((coin, token_asset_info(&token_addr)))
             }
         });
 
@@ -161,11 +163,11 @@ impl Helper {
             }],
             token_code_id,
             owner: owner.to_string(),
-            max_referral_commission: Decimal::one(),
+            max_referral_commission: Decimal256::one(),
             default_stake_config: DefaultStakeConfig {
                 staking_code_id,
-                tokens_per_power: Uint128::new(1000),
-                min_bond: Uint128::new(1000),
+                tokens_per_power: Uint256::new(1000),
+                min_bond: Uint256::new(1000),
                 unbonding_periods: vec![60 * 60 * 24 * 7],
                 max_distributions: 6,
                 converter: None,
@@ -173,14 +175,16 @@ impl Helper {
             trading_starts: None,
         };
 
-        let factory = app.instantiate_contract(
-            factory_code_id,
-            owner.clone(),
-            &init_msg,
-            &[],
-            "FACTORY",
-            None,
-        )?;
+        let factory = app
+            .instantiate_contract(
+                factory_code_id,
+                owner.clone(),
+                &init_msg,
+                &[],
+                "FACTORY",
+                None,
+            )
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
 
         let asset_infos = asset_infos_vec
             .clone()
@@ -202,11 +206,13 @@ impl Helper {
             total_fee_bps: None,
         };
 
-        app.execute_contract(owner.clone(), factory.clone(), &init_pair_msg, &[])?;
+        app.execute_contract(owner.clone(), factory.clone(), &init_pair_msg, &[])
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
 
         let resp: PairInfo = app
             .wrap()
-            .query_wasm_smart(&factory, &wyndex::factory::QueryMsg::Pair { asset_infos })?;
+            .query_wasm_smart(&factory, &wyndex::factory::QueryMsg::Pair { asset_infos })
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
 
         Ok(Self {
             app,
@@ -238,6 +244,7 @@ impl Helper {
 
         self.app
             .execute_contract(sender.clone(), self.pair_addr.clone(), &msg, &funds)
+            .map_err(|e| anyhow::anyhow!("{e}"))
     }
 
     pub fn withdraw_liquidity(
@@ -248,12 +255,13 @@ impl Helper {
     ) -> AnyResult<AppResponse> {
         let msg = Cw20ExecuteMsg::Send {
             contract: self.pair_addr.to_string(),
-            amount: Uint128::from(amount),
+            amount: Uint256::from(amount),
             msg: to_json_binary(&Cw20HookMsg::WithdrawLiquidity { assets }).unwrap(),
         };
 
         self.app
             .execute_contract(sender.clone(), self.lp_token.clone(), &msg, &[])
+            .map_err(|e| anyhow::anyhow!("{e}"))
     }
 
     pub fn swap(
@@ -280,6 +288,7 @@ impl Helper {
 
                 self.app
                     .execute_contract(sender.clone(), contract_addr.clone(), &msg, &[])
+                    .map_err(|e| anyhow::anyhow!("{e}"))
             }
             AssetInfoValidated::Native { .. } => {
                 let funds = offer_asset.mock_coin_sent(
@@ -301,6 +310,7 @@ impl Helper {
 
                 self.app
                     .execute_contract(sender.clone(), self.pair_addr.clone(), &msg, &funds)
+                    .map_err(|e| anyhow::anyhow!("{e}"))
             }
         }
     }
@@ -364,7 +374,7 @@ impl Helper {
                 decimals,
                 initial_balances: vec![Cw20Coin {
                     address: owner.to_string(),
-                    amount: Uint128::from(init_balance),
+                    amount: Uint256::from(init_balance),
                 }],
                 mint: None,
                 marketing: None,
@@ -388,19 +398,17 @@ impl Helper {
             )
             .unwrap();
 
-        resp.balance.u128()
+        Uint128::try_from(resp.balance).unwrap().u128()
     }
 
     pub fn coin_balance(&self, coin: &TestCoin, user: &Addr) -> u128 {
         match &self.assets[coin] {
             AssetInfoValidated::Token(contract_addr) => self.token_balance(contract_addr, user),
-            AssetInfoValidated::Native(denom) => self
-                .app
-                .wrap()
-                .query_balance(user, denom)
-                .unwrap()
-                .amount
-                .u128(),
+            AssetInfoValidated::Native(denom) => {
+                Uint128::try_from(self.app.wrap().query_balance(user, denom).unwrap().amount)
+                    .unwrap()
+                    .u128()
+            }
         }
     }
 
@@ -460,7 +468,7 @@ impl AssetExt for AssetValidated {
                     .unwrap();
             }
             AssetInfoValidated::Native(denom) if !self.amount.is_zero() => {
-                funds = vec![coin(self.amount.u128(), denom)];
+                funds = vec![coin(Uint128::try_from(self.amount).unwrap().u128(), denom)];
             }
             _ => {}
         }
