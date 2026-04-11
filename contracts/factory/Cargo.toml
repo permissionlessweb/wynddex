@@ -25,13 +25,13 @@ cw20 = { workspace = true }
 itertools = { workspace = true }
 thiserror = { workspace = true }
 wyndex = { workspace = true }
-wyndex-test-helpers = { workspace = true }
 wyndex-stake = { workspace = true, features = ["library"] }
+wyndex-test-helpers = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
 cw-multi-test = { workspace = true }
 cw20 = { workspace = true }
 cw20-base = { workspace = true }
-wyndex-factory-2_1_0 = { package = "wyndex-factory", path = "." }
+wyndex-factory-2_1_0 = { path = "." }
 wyndex-pair = { workspace = true }
